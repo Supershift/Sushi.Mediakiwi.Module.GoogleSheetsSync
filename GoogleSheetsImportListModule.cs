@@ -1,10 +1,5 @@
-﻿using Google;
-using Google.Apis.Auth.OAuth2;
-using Google.Apis.Drive.v3;
-using Google.Apis.Services;
-using Google.Apis.Sheets.v4;
-using Google.Apis.Sheets.v4.Data;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Sushi.Mediakiwi.Data;
 using Sushi.Mediakiwi.Framework;
 using Sushi.Mediakiwi.Framework.EventArguments;
@@ -17,123 +12,35 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
     {
         #region Properties
 
+        GoogleSheetLogic Converter { get; set; }
+
         public string ModuleTitle => "Google Sheets importer";
 
-        private SheetsService _sheetsService { get; set; }
-        private DriveService _driveService { get; set; }
+        public bool ShowInSearchMode { get; set; } = true;
 
-        public bool ShowInSearchMode { get; set; }
+        public bool ShowInEditMode { get; set; } = false;
 
-        public bool ShowInEditMode { get; set; }
-
-        public string IconClass { get; set; }
+        public string IconClass { get; set; } = "icon-cloud-download";
 
         public string IconURL { get; set; }
 
-        public string Tooltip { get; set; }
+        public string Tooltip { get; set; } = "Import data from Google Sheets";
 
-        public bool ConfirmationNeeded { get; set; }
+        public bool ConfirmationNeeded { get; set; } = true;
 
-        public string ConfirmationTitle { get; set; }
-
-        public string ConfirmationQuestion { get; set; }
-
-        private string ClientSecretsFileName { get; set; }
+        public string ConfirmationTitle { get; set; } = "Are you sure ?";
+        public string ConfirmationQuestion { get; set; } = "This will overwrite the data in this list with the values entered in Google Sheets";
 
         #endregion Properties
 
         #region CTor
 
-        public GoogleSheetsImportListModule()
+        public GoogleSheetsImportListModule(IServiceProvider services)
         {
-            ShowInSearchMode = true;
-            ShowInEditMode = false;
-            Tooltip = "Import data from Google Sheets";
-            IconClass = "icon-cloud-download";
-            ConfirmationNeeded = true;
-            ConfirmationTitle = "Are you sure ?";
-            ConfirmationQuestion = "This will overwrite the data in this list with the values entered in Google Sheets";
+            Converter = services.GetService<GoogleSheetLogic>();
         }
 
         #endregion CTor
-
-        #region Initialize Module Async
-
-        public async Task InitAsync(string credentialsFileName)
-        {
-            await InitAsync(credentialsFileName, null);
-        }
-
-        public async Task InitAsync(string credentialsFileName, string clientSecretsFileName)
-        {
-            GoogleCredential credential;
-            ClientSecretsFileName = clientSecretsFileName;
-
-            try
-            {
-                using (var stream = new FileStream(credentialsFileName, FileMode.Open, FileAccess.Read))
-                {
-                    credential = GoogleCredential.FromStream(stream).CreateScoped(new string[] { SheetsService.Scope.Spreadsheets, DriveService.Scope.DriveFile });
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(ex);
-                throw ex;
-            }
-
-            await ModuleInstaller.InstallWhenNeededAsync();
-            // Create Google Sheets API service.
-            _sheetsService = new SheetsService(new BaseClientService.Initializer()
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = nameof(GoogleSheetExportListModule),
-            });
-
-            // Create Google Drive API service.
-            _driveService = new DriveService(new BaseClientService.Initializer()
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = nameof(GoogleSheetExportListModule),
-            });
-        }
-
-        #endregion Initialize Module Async
-
-        #region Get Sheet Async
-
-        private async Task<Spreadsheet> GetSheetAsync(string id)
-        {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                return null;
-            }
-
-            try
-            {
-
-                var getSpreadsheetRequest = new SpreadsheetsResource.GetRequest(_sheetsService, id);
-                getSpreadsheetRequest.IncludeGridData = true;
-
-                var responseGetSpreadsheet = await getSpreadsheetRequest.ExecuteAsync();
-                if (responseGetSpreadsheet != null)
-                {
-                    return responseGetSpreadsheet;
-                }
-
-            }
-            catch (GoogleApiException ex)
-            {
-                if (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    return null;
-                }
-            }
-
-            return null;
-        }
-
-        #endregion Get Sheet Async
 
         #region ConvertValue
 
@@ -174,7 +81,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         public async Task<ModuleExecutionResult> ExecuteAsync(IComponentListTemplate inList, IApplicationUser inUser, HttpContext context)
         {
             // When this module is User based, authorize the user
-            await AuthorizeUser(inUser);
+            await Converter.AuthorizeUser(inUser);
 
             // get existing List Link;
             var sheetListLink = await Data.GoogleSheetListLink.FetchSingleAsync(inList.wim.CurrentList.ID, inUser.ID);
@@ -189,7 +96,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 string sheetId = sheetListLink.SheetId;
 
                 // Check for spreadsheet existence
-                var existingSheet = await GetSheetAsync(sheetId);
+                var existingSheet = await Converter.GetSheetAsync(sheetId);
                 if (existingSheet != null)
                 {
                     var currentSheet = existingSheet.Sheets.FirstOrDefault();
@@ -298,58 +205,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         #endregion Execute Module Async
 
-        #region AuthorizeUser
-
-        private async Task AuthorizeUser(IApplicationUser user)
-        {
-            // Only perform User OAuth when the client secrets file is set
-            if (string.IsNullOrWhiteSpace(ClientSecretsFileName))
-            {
-                return;
-            }
-
-            UserCredential credential;
-
-            try
-            {
-                using (var stream = new FileStream(ClientSecretsFileName, FileMode.Open, FileAccess.Read))
-                {
-                    credential = GoogleWebAuthorizationBroker.AuthorizeAsync(
-                        (await GoogleClientSecrets.FromStreamAsync(stream)).Secrets,
-                        new string[] { SheetsService.Scope.Spreadsheets, DriveService.Scope.DriveFile },
-                        user.Email,
-                        CancellationToken.None,
-                        new GoogleTokenStore(user, nameof(GoogleSheetExportListModule))
-                        ).Result;
-
-                    Console.WriteLine("Credential file saved to user");
-                }
-
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(ex);
-                throw ex;
-            }
-
-            // Create Google Sheets API service.
-            _sheetsService = new SheetsService(new BaseClientService.Initializer()
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = nameof(GoogleSheetExportListModule),
-            });
-
-            // Create Google Drive API service.
-            _driveService = new DriveService(new BaseClientService.Initializer()
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = nameof(GoogleSheetExportListModule),
-            });
-
-        }
-
-        #endregion AuthorizeUser
-
+        
         #region Show On List
 
         public bool ShowOnList(IComponentListTemplate inList, IApplicationUser inUser)
