@@ -13,6 +13,7 @@
     <Description>Contains an import and export module for Google Sheets</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/Supershift/Sushi.Mediakiwi.Module.GoogleSheetsSync</RepositoryUrl>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
