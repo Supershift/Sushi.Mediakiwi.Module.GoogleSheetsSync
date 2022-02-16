@@ -21,6 +21,15 @@ steps:
   displayName: 'dotnet build $(buildConfiguration)'
 
 - task: DotNetCoreCLI@2
+  displayName: 'Create Nuget Package'
+  inputs:
+    command: 'pack'
+    packagesToPack: '**/*.csproj'
+    nobuild: true
+    versioningScheme: 'off'
+
+- task: DotNetCoreCLI@2
+  displayName: 'Publish build'
   inputs:
     command: 'publish'
     publishWebProjects: false
@@ -30,6 +39,7 @@ steps:
 
 # this code takes all the files in $(Build.ArtifactStagingDirectory) and uploads them as an artifact of your build.
 - task: PublishPipelineArtifact@1
+  displayName: 'Publish artifacts'
   inputs:
     targetPath: '$(Build.ArtifactStagingDirectory)' 
     artifactName: 'Sushi.Mediakiwi.Module.GoogleSheetsSync'
