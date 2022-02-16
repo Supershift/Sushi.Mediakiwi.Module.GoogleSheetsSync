@@ -13,32 +13,11 @@ using Sushi.Mediakiwi.Framework.Interfaces;
 namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 {
 
-    internal class GoogleSheetsColumnValue
-    {
-        public string PropertyName { get; set; }
-        public bool PropertyIsKey { get; set; }
-        public object Value { get; set; }
-        public GoogleSheetsColumnValue() { }
-
-        public GoogleSheetsColumnValue(string propertyName, object value, bool isKey)
-        {
-            PropertyName = propertyName;
-            Value = value;
-            PropertyIsKey = isKey;
-        }
-
-        public GoogleSheetsColumnValue(string propertyName, object value)
-        {
-            PropertyName = propertyName;
-            Value = value;
-        }
-    }
-
     public class GoogleSheetsImportListModule : IListModule
     {
         #region Properties
 
-        public string ModuleTitle => "GoogleSheets exporter";
+        public string ModuleTitle => "Google Sheets importer";
 
         private SheetsService _sheetsService { get; set; }
         private DriveService _driveService { get; set; }
@@ -69,11 +48,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         {
             ShowInSearchMode = true;
             ShowInEditMode = false;
-            Tooltip = "Import data from GoogleSheets";
+            Tooltip = "Import data from Google Sheets";
             IconClass = "icon-cloud-download";
             ConfirmationNeeded = true;
             ConfirmationTitle = "Are you sure ?";
-            ConfirmationQuestion = "This will overwrite the data in this list with the values entered in GoogleSheets";
+            ConfirmationQuestion = "This will overwrite the data in this list with the values entered in Google Sheets";
         }
 
         #endregion CTor
@@ -156,6 +135,40 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         #endregion Get Sheet Async
 
+        #region ConvertValue
+
+        /// <summary>
+        /// Converts the inputvalue to the supplied targetType
+        /// </summary>
+        /// <param name="inputValue">The value to convert</param>
+        /// <param name="targetType">The output type to convert to</param>
+        /// <returns>An object of type <c>targetType</c> or NULL when an empty value is supplied or the conversion failed</returns>
+        private object ConvertValue(object inputValue, Type targetType)
+        {
+            object result = null;
+
+            try
+            {
+                if (inputValue == null || inputValue == DBNull.Value)
+                {
+                    return result;
+                }
+
+                if (targetType.IsEnum == false)
+                {
+                    result = Convert.ChangeType(inputValue, targetType);
+                }
+            }
+            catch
+            {
+                
+            }
+
+            return result;
+        }
+
+        #endregion ConvertValue
+
         #region Execute Module Async
 
         public async Task<ModuleExecutionResult> ExecuteAsync(IComponentListTemplate inList, IApplicationUser inUser, HttpContext context)
@@ -189,19 +202,32 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         
                         // Lookup table for property names
                         Dictionary<int, string> ColumnPropertyName = new Dictionary<int, string>();
+                        
+                        // Lookup table for property types
+                        Dictionary<int, Type> ColumnPropertyType = new Dictionary<int, Type>();
 
-                        // First get a column index -> propertyname mapping
-                        int colIdx = 0;
+                        // First get a column index -> propertyName mapping
                         foreach (var metaData in sheetData?.ColumnMetadata?.Where(x => x.DeveloperMetadata?.Count > 0))
                         {
                             foreach (var devMetaData in metaData.DeveloperMetadata?.Where(x => x.MetadataKey.Equals("propertyName", StringComparison.InvariantCultureIgnoreCase)))
                             {
-                                var isKey = metaData?.DeveloperMetadata?.Any(x => x.MetadataKey.Equals("propertyIsKey") && x.MetadataValue.Equals("true")) == true;
-
                                 var targetIdx = devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1) - 1;
                                 if (ColumnPropertyName.ContainsKey(targetIdx) == false)
                                 {
                                     ColumnPropertyName[devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1) - 1] = devMetaData.MetadataValue;
+                                }
+                            }
+                        }
+
+                        // Then get a column index -> propertyType mapping
+                        foreach (var metaData in sheetData?.ColumnMetadata?.Where(x => x.DeveloperMetadata?.Count > 0))
+                        {
+                            foreach (var devMetaData in metaData.DeveloperMetadata?.Where(x => x.MetadataKey.Equals("propertyType", StringComparison.InvariantCultureIgnoreCase)))
+                            {
+                                var targetIdx = devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1) - 1;
+                                if (ColumnPropertyType.ContainsKey(targetIdx) == false)
+                                {
+                                    ColumnPropertyType[devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1) - 1] = Type.GetType(devMetaData.MetadataValue);
                                 }
                             }
                         }
@@ -220,7 +246,6 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                                 if (cellValue?.EffectiveValue?.NumberValue.HasValue == true && cellValue?.EffectiveFormat?.NumberFormat?.Type?.Equals("DATE_TIME", StringComparison.InvariantCulture) == true)
                                 {
                                     value = DateTime.FromOADate(cellValue.EffectiveValue.NumberValue.Value);
-
                                 }
                                 else if (cellValue?.EffectiveValue?.NumberValue.HasValue == true)
                                 {
@@ -235,6 +260,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                                     value = cellValue.EffectiveValue.StringValue;
                                 }
 
+                                value = ConvertValue(value, ColumnPropertyType[lookupColidx]);
                                 props.Add(ColumnPropertyName[lookupColidx], value);
                             }
 
@@ -257,7 +283,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 return new ModuleExecutionResult()
                 {
                     IsSuccess = true,
-                    WimNotificationOutput = "Updated"
+                    WimNotificationOutput = $"Received {CollectedValues.Count} rows from Google Sheets"
                 };
             }
             else 

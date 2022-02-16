@@ -15,7 +15,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
     {
         #region Properties
 
-        public string ModuleTitle => "GoogleSheets exporter";
+        public string ModuleTitle => "Google Sheets exporter";
 
         private SheetsService _sheetsService { get; set; }
         private DriveService _driveService { get; set; }
@@ -211,6 +211,20 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         {
                             DeveloperMetadataLookup = new DeveloperMetadataLookup()
                             {
+                                MetadataKey = "propertyType"
+                            }
+                        }
+                    }
+                });
+                
+                requests.Add(new Request()
+                {
+                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest()
+                    {
+                        DataFilter = new DataFilter()
+                        {
+                            DeveloperMetadataLookup = new DeveloperMetadataLookup()
+                            {
                                 MetadataKey = "propertyIsKey"
                             }
                         }
@@ -323,7 +337,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     });
                 }
 
-                // Add Developer MetaData for Columns
+
+                // Get the type of item we're interating
+                var listItemType = inList?.wim?.ListDataCollection?.Count > 0 ? inList.wim.ListDataCollection[0].GetType() : null;
+
+                // Add Developer MetaData for Header Columns
                 foreach (var col in inList.wim.ListDataColumns.List)
                 {
                     var colIdx = inList.wim.ListDataColumns.List.IndexOf(col) + 1;
@@ -345,8 +363,9 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         Visibility = "DOCUMENT",
                     });
 
-                    // When the column is a Key type, assign it to metadata
-                    if (col.Type == ListDataColumnType.UniqueIdentifier || col.Type == ListDataColumnType.UniqueIdentifierPresent || col.Type == ListDataColumnType.UniqueHighlightedIdentifier || col.Type == ListDataColumnType.UniqueHighlightedIdentifierPresent)
+
+                    // Add the type of the property this column represents
+                    if (listItemType != null)
                     {
                         devMetaData.Add(new DeveloperMetadata()
                         {
@@ -360,8 +379,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                                     Dimension = "COLUMNS"
                                 },
                             },
-                            MetadataKey = "propertyIsKey",
-                            MetadataValue = "true",
+                            MetadataKey = "propertyType",
+                            MetadataValue = listItemType.GetProperty(col.ColumnValuePropertyName).PropertyType.FullName,
                             Visibility = "DOCUMENT",
                         });
                     }
