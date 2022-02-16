@@ -47,7 +47,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             ShowInSearchMode = true;
             ShowInEditMode = false;
             Tooltip = "View this list in Google Sheets";
-            IconClass = "icon-file-text-o";
+            IconClass = "icon-cloud-upload";
         }
 
         #endregion CTor
@@ -107,6 +107,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             try
             {
                 var getRequest = new SpreadsheetsResource.GetRequest(_sheetsService, id);
+                getRequest.IncludeGridData = true;
                 var responseGet = await getRequest.ExecuteAsync();
                 if (responseGet != null)
                 {
@@ -171,8 +172,52 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                             }
                         });
                     }
-                } 
-                
+                }
+
+                // Delete all developer metadata
+                requests.Add(new Request()
+                {
+                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest()
+                    {
+                        DataFilter = new DataFilter()
+                        {
+                            DeveloperMetadataLookup = new DeveloperMetadataLookup()
+                            {
+                                MetadataKey = "valueType"
+                            }
+                        }
+                    }
+                });
+
+                requests.Add(new Request()
+                {
+                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest()
+                    {
+                        DataFilter = new DataFilter()
+                        {
+                            DeveloperMetadataLookup = new DeveloperMetadataLookup()
+                            {
+                                MetadataKey = "propertyName"
+                            }
+                        }
+                    }
+                });
+
+                requests.Add(new Request()
+                {
+                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest()
+                    {
+                        DataFilter = new DataFilter()
+                        {
+                            DeveloperMetadataLookup = new DeveloperMetadataLookup()
+                            {
+                                MetadataKey = "propertyIsKey"
+                            }
+                        }
+                    }
+                });
+
+
                 // Check if we have a named range already
                 var namedSheetId = currentSpreadSheet?.NamedRanges?.FirstOrDefault(x => x.Name == "MK.Columns")?.NamedRangeId;
 
@@ -231,40 +276,9 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     Values = new List<CellData>() 
                 };
 
-                int colIdx = 0;
+                // Add header columns
                 foreach (var col in inList.wim.ListDataColumns.List)
                 {
-                    colIdx++;
-
-                    // Add Developer metadata
-                    var UpdateDeveloperMetadata = new UpdateDeveloperMetadataRequest()
-                    {
-                        DeveloperMetadata = new DeveloperMetadata()
-                        {
-                            Location = new DeveloperMetadataLocation()
-                            {
-                                DimensionRange = new DimensionRange()
-                                {
-                                    StartIndex = colIdx,
-                                    EndIndex = colIdx + 1,
-                                    SheetId = currentSheet.Properties.SheetId,
-                                    Dimension="COLUMNS"
-                                },
-                            },
-                            MetadataKey = "propertyName",
-                            MetadataValue = col.ColumnValuePropertyName,
-                            Visibility = "DOCUMENT",
-                        },
-                        Fields = "*",
-                    };
-
-                    // Add developer metadata request
-                    requests.Add(new Request()
-                    {
-                        UpdateDeveloperMetadata = UpdateDeveloperMetadata
-                    });
-
-                    // Add header columns
                     headerRow.Values.Add(new CellData()
                     {
                         UserEnteredValue = new ExtendedValue()
@@ -277,19 +291,93 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                             {
                                 Blue = 0.8f,
                                 Green = 0.8f,
-                                Red =  0.8f,
+                                Red = 0.8f,
                                 Alpha = 1
                             },
-                            TextFormat = new TextFormat() 
-                            { 
+                            TextFormat = new TextFormat()
+                            {
                                 Bold = true,
-                            }, 
+                            },
                         },
                     });
                 }
 
                 // Add header row
                 rowsData.Add(headerRow);
+
+                List<DeveloperMetadata> devMetaData = new List<DeveloperMetadata>();
+
+                // Retrieve Item Type, and set as Developer MetaData so it can later be reconstructed
+                if (inList?.wim?.ListDataCollection?.Count > 0)
+                {
+                    var itemType = inList.wim.ListDataCollection[0].GetType().FullName;
+                    devMetaData.Add(new DeveloperMetadata()
+                    {
+                        Location = new DeveloperMetadataLocation()
+                        {
+                            SheetId = currentSheet.Properties.SheetId
+                        },
+                        MetadataKey = "valueType",
+                        MetadataValue = itemType,
+                        Visibility = "DOCUMENT",
+                    });
+                }
+
+                // Add Developer MetaData for Columns
+                foreach (var col in inList.wim.ListDataColumns.List)
+                {
+                    var colIdx = inList.wim.ListDataColumns.List.IndexOf(col) + 1;
+
+                    devMetaData.Add(new DeveloperMetadata()
+                    {
+                        Location = new DeveloperMetadataLocation()
+                        {
+                            DimensionRange = new DimensionRange()
+                            {
+                                StartIndex = colIdx,
+                                EndIndex = colIdx + 1,
+                                SheetId = currentSheet.Properties.SheetId,
+                                Dimension = "COLUMNS"
+                            },
+                        },
+                        MetadataKey = "propertyName",
+                        MetadataValue = col.ColumnValuePropertyName,
+                        Visibility = "DOCUMENT",
+                    });
+
+                    // When the column is a Key type, assign it to metadata
+                    if (col.Type == ListDataColumnType.UniqueIdentifier || col.Type == ListDataColumnType.UniqueIdentifierPresent || col.Type == ListDataColumnType.UniqueHighlightedIdentifier || col.Type == ListDataColumnType.UniqueHighlightedIdentifierPresent)
+                    {
+                        devMetaData.Add(new DeveloperMetadata()
+                        {
+                            Location = new DeveloperMetadataLocation()
+                            {
+                                DimensionRange = new DimensionRange()
+                                {
+                                    StartIndex = colIdx,
+                                    EndIndex = colIdx + 1,
+                                    SheetId = currentSheet.Properties.SheetId,
+                                    Dimension = "COLUMNS"
+                                },
+                            },
+                            MetadataKey = "propertyIsKey",
+                            MetadataValue = "true",
+                            Visibility = "DOCUMENT",
+                        });
+                    }
+                }
+
+                foreach (var _developerMetadata in devMetaData)
+                {
+                    // Add developer metadata request
+                    requests.Add(new Request()
+                    {
+                        CreateDeveloperMetadata = new CreateDeveloperMetadataRequest()
+                        {
+                            DeveloperMetadata = _developerMetadata,
+                        }
+                    });
+                }
 
                 // Loop through items
                 foreach (var item in inList.wim.ListDataCollection)
@@ -396,6 +484,22 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     }
                 });
 
+
+                // Auto fit columns
+                requests.Add(new Request()
+                {
+                    AutoResizeDimensions = new AutoResizeDimensionsRequest()
+                    {
+                        Dimensions = new DimensionRange()
+                        {
+                            Dimension = "COLUMNS",
+                            EndIndex = headerRow.Values.Count,
+                            StartIndex = 0,
+                            SheetId = currentSheet.Properties.SheetId
+                        }
+                    }
+                });
+
                 // Run all requests
                 if (requests?.Count > 0)
                 {
@@ -430,7 +534,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     {
                         Properties = new SheetProperties()
                         {
-                            Title="Sheet 1"
+                            Title = inList.wim.CurrentList.Name
                         }
                     }
                 },

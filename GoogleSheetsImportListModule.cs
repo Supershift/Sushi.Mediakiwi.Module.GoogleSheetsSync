@@ -7,31 +7,57 @@ using Google.Apis.Sheets.v4.Data;
 using Microsoft.AspNetCore.Http;
 using Sushi.Mediakiwi.Data;
 using Sushi.Mediakiwi.Framework;
+using Sushi.Mediakiwi.Framework.EventArguments;
 using Sushi.Mediakiwi.Framework.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 {
-    internal class GoogleSheetsImportListModule : IListModule
+
+    internal class GoogleSheetsColumnValue
+    {
+        public string PropertyName { get; set; }
+        public bool PropertyIsKey { get; set; }
+        public object Value { get; set; }
+        public GoogleSheetsColumnValue() { }
+
+        public GoogleSheetsColumnValue(string propertyName, object value, bool isKey)
+        {
+            PropertyName = propertyName;
+            Value = value;
+            PropertyIsKey = isKey;
+        }
+
+        public GoogleSheetsColumnValue(string propertyName, object value)
+        {
+            PropertyName = propertyName;
+            Value = value;
+        }
+    }
+
+    public class GoogleSheetsImportListModule : IListModule
     {
         #region Properties
 
-        public string ModuleTitle => "GoogleSheets importer";
-        public bool ShowInSearchMode { get; set; }
-        public bool ShowInEditMode { get; set; }
-        public string IconClass { get; set; }
-        public string IconURL { get; set; }
-        public string Tooltip { get; set; }
-        public bool ConfirmationNeeded { get; set; }
-        public string ConfirmationTitle { get; set; }
-        public string ConfirmationQuestion { get; set; }
+        public string ModuleTitle => "GoogleSheets exporter";
 
         private SheetsService _sheetsService { get; set; }
         private DriveService _driveService { get; set; }
+
+        public bool ShowInSearchMode { get; set; }
+
+        public bool ShowInEditMode { get; set; }
+
+        public string IconClass { get; set; }
+
+        public string IconURL { get; set; }
+
+        public string Tooltip { get; set; }
+
+        public bool ConfirmationNeeded { get; set; }
+
+        public string ConfirmationTitle { get; set; }
+
+        public string ConfirmationQuestion { get; set; }
 
         private string ClientSecretsFileName { get; set; }
 
@@ -44,44 +70,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             ShowInSearchMode = true;
             ShowInEditMode = false;
             Tooltip = "Import data from GoogleSheets";
-            IconClass = "icon-file-text-o";
+            IconClass = "icon-cloud-download";
             ConfirmationNeeded = true;
             ConfirmationTitle = "Are you sure ?";
             ConfirmationQuestion = "This will overwrite the data in this list with the values entered in GoogleSheets";
         }
 
         #endregion CTor
-
-        #region Get Sheet Async
-
-        private async Task<Spreadsheet> GetSheetAsync(string id)
-        {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                return null;
-            }
-
-            try
-            {
-                var getRequest = new SpreadsheetsResource.GetRequest(_sheetsService, id);
-                var responseGet = await getRequest.ExecuteAsync();
-                if (responseGet != null)
-                {
-                    return responseGet;
-                }
-            }
-            catch (GoogleApiException ex)
-            {
-                if (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    return null;
-                }
-            }
-
-            return null;
-        }
-
-        #endregion Get Sheet Async
 
         #region Initialize Module Async
 
@@ -108,6 +103,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 throw ex;
             }
 
+            await ModuleInstaller.InstallWhenNeededAsync();
             // Create Google Sheets API service.
             _sheetsService = new SheetsService(new BaseClientService.Initializer()
             {
@@ -125,42 +121,158 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         #endregion Initialize Module Async
 
-        public async Task<ModuleExecutionResult> ExecuteAsync(IComponentListTemplate inList, IApplicationUser inUser, HttpContext context)
-        {
-            await AuthorizeUser(inUser);
-            string sheetId = "";
-            int rowCount = 0;
+        #region Get Sheet Async
 
-            if (inList?.wim?.CurrentList?.Settings?.HasProperty("GoogleSheetID") == true)
+        private async Task<Spreadsheet> GetSheetAsync(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
             {
-                sheetId = inList.wim.CurrentList.Settings["GoogleSheetID"].Value;
+                return null;
             }
 
-            //if (string.IsNullOrWhiteSpace(sheetId) == false)
-            //{
-            //    var spreadSheet = await GetSheetAsync(sheetId);
-            //    var firstSheet = spreadSheet.Sheets.FirstOrDefault();
-            //    if (firstSheet != null)
-            //    {
-            //        foreach (var row in firstSheet.Data)
-            //        {
-            //            rowCount++;
-            //            foreach (var cell in row.ColumnMetadata[1].DeveloperMetadata.)
-            //            {
-
-            //            }
-            //        }
-            //    }
-            //}
-
-            return new ModuleExecutionResult()
+            try
             {
-                IsSuccess = true,
-                WimNotificationOutput = $"Successfully updated {rowCount} rows."
-            };
+
+                var getSpreadsheetRequest = new SpreadsheetsResource.GetRequest(_sheetsService, id);
+                getSpreadsheetRequest.IncludeGridData = true;
+
+                var responseGetSpreadsheet = await getSpreadsheetRequest.ExecuteAsync();
+                if (responseGetSpreadsheet != null)
+                {
+                    return responseGetSpreadsheet;
+                }
+
+            }
+            catch (GoogleApiException ex)
+            {
+                if (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return null;
+                }
+            }
+
+            return null;
         }
 
-        #region Authorize User
+        #endregion Get Sheet Async
+
+        #region Execute Module Async
+
+        public async Task<ModuleExecutionResult> ExecuteAsync(IComponentListTemplate inList, IApplicationUser inUser, HttpContext context)
+        {
+            // When this module is User based, authorize the user
+            await AuthorizeUser(inUser);
+
+            // get existing List Link;
+            var sheetListLink = await Data.GoogleSheetListLink.FetchSingleAsync(inList.wim.CurrentList.ID, inUser.ID);
+
+            // Collected Values Container
+            List<Dictionary<string, object>> CollectedValues = new List<Dictionary<string, object>>();
+
+            // Check if the link exists
+            if (sheetListLink?.ID > 0)
+            {
+                // Get Sheet ID from db entity
+                string sheetId = sheetListLink.SheetId;
+
+                // Check for spreadsheet existence
+                var existingSheet = await GetSheetAsync(sheetId);
+                if (existingSheet != null)
+                {
+                    var currentSheet = existingSheet.Sheets.FirstOrDefault();
+                    if (currentSheet?.Data?.Count > 0)
+                    {
+                        // Get TargetType
+                        string fullTypeName = currentSheet?.DeveloperMetadata?.FirstOrDefault(x => x.MetadataKey.Equals("valueType", StringComparison.InvariantCulture)).MetadataValue;
+     
+                        var sheetData = currentSheet.Data.FirstOrDefault();
+                        
+                        // Lookup table for property names
+                        Dictionary<int, string> ColumnPropertyName = new Dictionary<int, string>();
+
+                        // First get a column index -> propertyname mapping
+                        int colIdx = 0;
+                        foreach (var metaData in sheetData?.ColumnMetadata?.Where(x => x.DeveloperMetadata?.Count > 0))
+                        {
+                            foreach (var devMetaData in metaData.DeveloperMetadata?.Where(x => x.MetadataKey.Equals("propertyName", StringComparison.InvariantCultureIgnoreCase)))
+                            {
+                                var isKey = metaData?.DeveloperMetadata?.Any(x => x.MetadataKey.Equals("propertyIsKey") && x.MetadataValue.Equals("true")) == true;
+
+                                var targetIdx = devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1) - 1;
+                                if (ColumnPropertyName.ContainsKey(targetIdx) == false)
+                                {
+                                    ColumnPropertyName[devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1) - 1] = devMetaData.MetadataValue;
+                                }
+                            }
+                        }
+
+
+                        // Loop through rows, skipping the first (header) row
+                        foreach (var row in sheetData.RowData.Skip(1))
+                        {
+                            Dictionary<string, object> props = new Dictionary<string, object>();
+
+                            foreach (var cellValue in row.Values)
+                            {
+                                int lookupColidx = row.Values.IndexOf(cellValue);
+                                object value = null;
+
+                                if (cellValue?.EffectiveValue?.NumberValue.HasValue == true && cellValue?.EffectiveFormat?.NumberFormat?.Type?.Equals("DATE_TIME", StringComparison.InvariantCulture) == true)
+                                {
+                                    value = DateTime.FromOADate(cellValue.EffectiveValue.NumberValue.Value);
+
+                                }
+                                else if (cellValue?.EffectiveValue?.NumberValue.HasValue == true)
+                                {
+                                    value = cellValue.EffectiveValue.NumberValue.Value;
+                                }
+                                else if (cellValue?.EffectiveValue?.BoolValue.HasValue == true)
+                                {
+                                    value = cellValue.EffectiveValue.BoolValue.Value;
+                                }
+                                else if (string.IsNullOrWhiteSpace(cellValue?.EffectiveValue?.StringValue) == false)
+                                {
+                                    value = cellValue.EffectiveValue.StringValue;
+                                }
+
+                                props.Add(ColumnPropertyName[lookupColidx], value);
+                            }
+
+                            CollectedValues.Add(props);
+                        }
+
+                        if (CollectedValues?.Count > 0 && inList is ComponentListTemplate template)
+                        {
+                            await template.OnListDataReceived(new ComponentListDataReceived()
+                            {
+                                DataSource = nameof(GoogleSheetsImportListModule),
+                                ReceivedProperties = CollectedValues,
+                                FullTypeName = fullTypeName
+                            });
+                        }
+                    }
+                }
+
+                
+                return new ModuleExecutionResult()
+                {
+                    IsSuccess = true,
+                    WimNotificationOutput = "Updated"
+                };
+            }
+            else 
+            {
+                return new ModuleExecutionResult()
+                {
+                    IsSuccess = false,
+                    WimNotificationOutput = "Could not find a link to a Google Sheets file"
+                };
+            }
+        }
+
+        #endregion Execute Module Async
+
+        #region AuthorizeUser
 
         private async Task AuthorizeUser(IApplicationUser user)
         {
@@ -209,21 +321,26 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             });
 
         }
-        #endregion Authorize User
 
-        #region Show on List
+        #endregion AuthorizeUser
+
+        #region Show On List
 
         public bool ShowOnList(IComponentListTemplate inList, IApplicationUser inUser)
         {
-            string sheetId = "";
-            if (inList?.wim?.CurrentList?.Settings?.HasProperty("GoogleSheetID") == true)
-            {
-                sheetId = inList.wim.CurrentList.Settings["GoogleSheetID"].Value;
-            }
+            var listLink = Task.Run(async () => await Data.GoogleSheetListLink.FetchSingleAsync(inList.wim.CurrentList.ID, inUser.ID)).Result;
+            var hasListLink = string.IsNullOrWhiteSpace(listLink?.SheetUrl) == false;
 
-            return string.IsNullOrWhiteSpace(sheetId) == false;
+            if (inList is ComponentListTemplate template)
+            {
+                return (template.HasListDataReceived && hasListLink);
+            }
+            else 
+            {
+                return hasListLink;
+            }
         }
 
-        #endregion Show on List
+        #endregion Show On List
     }
 }
