@@ -23,6 +23,14 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             ClientSecretsFileName = clientSecretsFileName;
         }
 
+        private async Task AddAppScript()
+        {
+            if (_sheetsService != null)
+            { 
+
+            }
+        }
+
         #region Initialize Async
 
         public async Task InitializeAsync()
@@ -96,6 +104,53 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         #endregion Get Sheet Async
 
+        private async Task<Dictionary<string, string>> GetDropdownValuesAsync(IComponentListTemplate inList, string propertyName)
+        {
+            Dictionary<string, string> temp = new Dictionary<string, string>();
+
+            if (inList is ComponentListTemplate template)
+            {
+                var property = inList.GetType().GetProperty(propertyName);
+                if (property != null)
+                {
+                    foreach (var att in property.GetCustomAttributes(true))
+                    {
+                        if (att is Framework.ContentListItem.Choice_DropdownAttribute dropdownAtt)
+                        { 
+                            dropdownAtt.SenderInstance = template;
+                            dropdownAtt.Property = property;
+
+                            var apiField = await dropdownAtt.GetApiFieldAsync();
+                            if (apiField?.Options?.Count > 0)
+                            {
+                                foreach (var option in apiField.Options)
+                                {
+                                    temp.Add(option.Value, option.Text);
+                                }
+                            }
+                        }
+                        else if (att is Framework.ContentListItem.Choice_RadioAttribute radioAtt)
+                        {
+                            radioAtt.SenderInstance = template;
+                            radioAtt.Property = property;
+
+                            var apiField = await radioAtt.GetApiFieldAsync();
+                            if (apiField?.Options?.Count > 0)
+                            {
+                                foreach (var option in apiField.Options)
+                                {
+                                    temp.Add(option.Value, option.Text);
+                                }
+                            }
+                        }
+                    }
+                }
+
+            }
+
+            return temp;
+        }
+
         #region Update Sheet Async
 
         public async Task UpdateSheetAsync(IComponentListTemplate inList, Spreadsheet currentSpreadSheet, Data.GoogleSheetListLink listLink)
@@ -120,8 +175,14 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 // All Additional Requests
                 List<Request> requests = new List<Request>();
 
-                // TODO: remove these lines, are for development only
-                if (currentSheet?.ProtectedRanges?.Count > 0)
+                // All late requests
+                List<Request> lateRequests = new List<Request>();
+
+                #region Remove all developer info
+
+                // Remove all existing protected ranges
+                // Remove all existing named ranges
+                if (currentSheet.ProtectedRanges?.Count > 0)
                 {
                     foreach (var protectedRange in currentSheet.ProtectedRanges)
                     {
@@ -200,55 +261,52 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     }
                 });
 
+                #endregion Remove all developer info
 
                 // Check if we have a named range already
-                var namedSheetId = currentSpreadSheet?.NamedRanges?.FirstOrDefault(x => x.Name == "MK.Columns")?.NamedRangeId;
+                var namedSheetId = "MK.Columns"; 
 
-                if (string.IsNullOrEmpty(namedSheetId))
+                // Add named range
+                lateRequests.Add(new Request()
                 {
-                    namedSheetId = "MK.Columns";
-                    requests.Add(new Request()
+                    AddNamedRange = new AddNamedRangeRequest()
                     {
-                        AddNamedRange = new AddNamedRangeRequest()
+                        NamedRange = new NamedRange()
                         {
-                            NamedRange = new NamedRange()
+                            Name = "MK.Columns",
+                            Range = new GridRange()
                             {
-                                Name = "MK.Columns",
-                                Range = new GridRange()
-                                {
-                                    StartRowIndex = 0,
-                                    EndRowIndex = 1,
-                                    StartColumnIndex = 0,
-                                    EndColumnIndex = 10000,
-                                    SheetId = currentSheet.Properties.SheetId
-                                },
-                                NamedRangeId = namedSheetId
-                            }
+                                StartRowIndex = 0,
+                                EndRowIndex = 1,
+                                StartColumnIndex = 0,
+                                EndColumnIndex = 10000,
+                                SheetId = currentSheet.Properties.SheetId
+                            },
+                            NamedRangeId = namedSheetId
                         }
-                    });
-                }
+                    }
+                });
+                
 
                 // Set first row as protected
-                if (currentSheet.ProtectedRanges == null || currentSheet.ProtectedRanges.Count == 0)
+                lateRequests.Add(new Request()
                 {
-                    requests.Add(new Request()
+                    AddProtectedRange = new AddProtectedRangeRequest()
                     {
-                        AddProtectedRange = new AddProtectedRangeRequest()
+                        ProtectedRange = new ProtectedRange()
                         {
-                            ProtectedRange = new ProtectedRange()
+                            NamedRangeId = namedSheetId,
+                            Description = "These columns should match the ones exported from Mediakiwi",
+                            Editors = new Editors()
                             {
-                                NamedRangeId = namedSheetId,
-                                Description = "These columns should match the ones exported from Mediakiwi",
-                                Editors = new Editors()
-                                {
-                                    Users = new List<string>(),
-                                    DomainUsersCanEdit = false,
-                                    Groups = new List<string>(),
-                                },
+                                Users = new List<string>(),
+                                DomainUsersCanEdit = false,
+                                Groups = new List<string>(),
                             },
-                        }
-                    });
-                }
+                        },
+                    }
+                });
+                
 
                 // Complete data collection
                 IList<RowData> rowsData = new List<RowData>();
@@ -259,9 +317,42 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     Values = new List<CellData>()
                 };
 
+              
+                int colidx = 0;
                 // Add header columns
                 foreach (var col in inList.wim.ListDataColumns.List)
                 {
+                    var items = await GetDropdownValuesAsync(inList, col.ColumnValuePropertyName);
+                    if (items?.Count > 0)
+                    {
+                        lateRequests.Add(new Request()
+                        {
+                            SetDataValidation = new SetDataValidationRequest()
+                            {
+                                Range = new GridRange()
+                                {
+                                    StartColumnIndex = colidx,
+                                    EndColumnIndex = colidx + 1,
+                                    StartRowIndex = 1,
+                                    SheetId = currentSheet.Properties.SheetId
+                                },
+                                Rule = new DataValidationRule()
+                                {
+                                    Condition = new BooleanCondition()
+                                    {
+                                        Type = "ONE_OF_LIST",
+                                        Values = items.Select(x => new ConditionValue() 
+                                        { 
+                                            UserEnteredValue = x.Key
+                                        }).ToList()
+                                    },
+                                    ShowCustomUi = true,
+                                    Strict = true,
+                                }
+                            }
+                        });
+                    }
+
                     headerRow.Values.Add(new CellData()
                     {
                         UserEnteredValue = new ExtendedValue()
@@ -283,6 +374,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                             },
                         },
                     });
+                    colidx++;
                 }
 
                 // Add header row
@@ -395,10 +487,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
                         if (rawData is string rawString)
                         {
-                            cellData.UserEnteredValue = new ExtendedValue()
+                            if (string.IsNullOrWhiteSpace(rawString) == false)
                             {
-                                StringValue = rawString
-                            };
+                                cellData.UserEnteredValue = new ExtendedValue()
+                                {
+                                    StringValue = rawString,
+                                };
+                            }
                         }
                         else if (rawData is bool rawBool)
                         {
@@ -449,7 +544,6 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                                 StringValue = rawData.ToString()
                             };
                         }
-
                         rowData.Values.Add(cellData);
 
                     }
@@ -474,7 +568,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
 
                 // Auto fit columns
-                requests.Add(new Request()
+                lateRequests.Add(new Request()
                 {
                     AutoResizeDimensions = new AutoResizeDimensionsRequest()
                     {
@@ -492,7 +586,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 if (requests?.Count > 0)
                 {
                     BatchUpdateSpreadsheetRequest requestBody = new BatchUpdateSpreadsheetRequest();
-                    requestBody.Requests = requests;
+                    requestBody.Requests = requests.Concat(lateRequests).ToList();
                     SpreadsheetsResource.BatchUpdateRequest request = _sheetsService.Spreadsheets.BatchUpdate(requestBody, currentSpreadSheet.SpreadsheetId);
                     BatchUpdateSpreadsheetResponse response = await request.ExecuteAsync();
                 }
