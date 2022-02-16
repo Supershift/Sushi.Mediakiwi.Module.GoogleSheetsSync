@@ -86,111 +86,17 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             // get existing List Link;
             var sheetListLink = await Data.GoogleSheetListLink.FetchSingleAsync(inList.wim.CurrentList.ID, inUser.ID);
 
-            // Collected Values Container
-            List<Dictionary<string, object>> CollectedValues = new List<Dictionary<string, object>>();
+            // Convert the sheet to a list Event
+            var convertSheetToListEventResult = await Converter.ConvertSheetToListDataReceivedEvent(sheetListLink, inList);
 
-            // Check if the link exists
-            if (sheetListLink?.ID > 0)
+            if (convertSheetToListEventResult.success && inList is ComponentListTemplate template)
             {
-                // Get Sheet ID from db entity
-                string sheetId = sheetListLink.SheetId;
+                await template.OnListDataReceived(convertSheetToListEventResult.listEvent);
 
-                // Check for spreadsheet existence
-                var existingSheet = await Converter.GetSheetAsync(sheetId);
-                if (existingSheet != null)
-                {
-                    var currentSheet = existingSheet.Sheets.FirstOrDefault();
-                    if (currentSheet?.Data?.Count > 0)
-                    {
-                        // Get TargetType
-                        string fullTypeName = currentSheet?.DeveloperMetadata?.FirstOrDefault(x => x.MetadataKey.Equals("valueType", StringComparison.InvariantCulture)).MetadataValue;
-     
-                        var sheetData = currentSheet.Data.FirstOrDefault();
-                        
-                        // Lookup table for property names
-                        Dictionary<int, string> ColumnPropertyName = new Dictionary<int, string>();
-                        
-                        // Lookup table for property types
-                        Dictionary<int, Type> ColumnPropertyType = new Dictionary<int, Type>();
-
-                        // First get a column index -> propertyName mapping
-                        foreach (var metaData in sheetData?.ColumnMetadata?.Where(x => x.DeveloperMetadata?.Count > 0))
-                        {
-                            foreach (var devMetaData in metaData.DeveloperMetadata?.Where(x => x.MetadataKey.Equals("propertyName", StringComparison.InvariantCultureIgnoreCase)))
-                            {
-                                var targetIdx = devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1) - 1;
-                                if (ColumnPropertyName.ContainsKey(targetIdx) == false)
-                                {
-                                    ColumnPropertyName[devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1) - 1] = devMetaData.MetadataValue;
-                                }
-                            }
-                        }
-
-                        // Then get a column index -> propertyType mapping
-                        foreach (var metaData in sheetData?.ColumnMetadata?.Where(x => x.DeveloperMetadata?.Count > 0))
-                        {
-                            foreach (var devMetaData in metaData.DeveloperMetadata?.Where(x => x.MetadataKey.Equals("propertyType", StringComparison.InvariantCultureIgnoreCase)))
-                            {
-                                var targetIdx = devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1) - 1;
-                                if (ColumnPropertyType.ContainsKey(targetIdx) == false)
-                                {
-                                    ColumnPropertyType[devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1) - 1] = Type.GetType(devMetaData.MetadataValue);
-                                }
-                            }
-                        }
-
-
-                        // Loop through rows, skipping the first (header) row
-                        foreach (var row in sheetData.RowData.Skip(1))
-                        {
-                            Dictionary<string, object> props = new Dictionary<string, object>();
-
-                            foreach (var cellValue in row.Values)
-                            {
-                                int lookupColidx = row.Values.IndexOf(cellValue);
-                                object value = null;
-
-                                if (cellValue?.EffectiveValue?.NumberValue.HasValue == true && cellValue?.EffectiveFormat?.NumberFormat?.Type?.Equals("DATE_TIME", StringComparison.InvariantCulture) == true)
-                                {
-                                    value = DateTime.FromOADate(cellValue.EffectiveValue.NumberValue.Value);
-                                }
-                                else if (cellValue?.EffectiveValue?.NumberValue.HasValue == true)
-                                {
-                                    value = cellValue.EffectiveValue.NumberValue.Value;
-                                }
-                                else if (cellValue?.EffectiveValue?.BoolValue.HasValue == true)
-                                {
-                                    value = cellValue.EffectiveValue.BoolValue.Value;
-                                }
-                                else if (string.IsNullOrWhiteSpace(cellValue?.EffectiveValue?.StringValue) == false)
-                                {
-                                    value = cellValue.EffectiveValue.StringValue;
-                                }
-
-                                value = ConvertValue(value, ColumnPropertyType[lookupColidx]);
-                                props.Add(ColumnPropertyName[lookupColidx], value);
-                            }
-
-                            CollectedValues.Add(props);
-                        }
-
-                        if (CollectedValues?.Count > 0 && inList is ComponentListTemplate template)
-                        {
-                            await template.OnListDataReceived(new ComponentListDataReceived()
-                            {
-                                DataSource = nameof(GoogleSheetsImportListModule),
-                                ReceivedProperties = CollectedValues,
-                                FullTypeName = fullTypeName
-                            });
-                        }
-                    }
-                }
-
-                
                 return new ModuleExecutionResult()
                 {
                     IsSuccess = true,
-                    WimNotificationOutput = $"Received {CollectedValues.Count} rows from Google Sheets"
+                    WimNotificationOutput = $"Received {convertSheetToListEventResult.listEvent.ReceivedProperties.Count} rows from Google Sheets"
                 };
             }
             else 
