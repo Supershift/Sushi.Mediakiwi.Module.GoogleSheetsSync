@@ -3,17 +3,33 @@ A list module for use in Mediakiwi which allows for synchronizing data with Goog
 
 Installation steps :
 * Download the ServiceAccount credentials file from the Google Cloud API explorer.
-* Download the OAuth client secrets file from the Google Cloud API explorer *(optional)*.
-* Place these files in the Root of your project and set 'Copy to output directory' to always.
-* Add these lines to your startup code :
+* Place this file in the Root of your project and set 'Copy to output directory' to always.
+* Add this section to your configuration file (appsettings.json) :
+
+```JSON
+"GoogleSheetsSettings": {
+  // Get this ClientID from the Google Cloud platform
+  "client-id": "[GOOGLE-CLIENT-ID]",
+  // Get this ClientSecret from the Google Cloud platform
+  "client-secret": "[GOOGLE-CLIENT-SECRET]",
+  // The relative filename for the AerviceAccount credentials file
+  "service-account-filename": "sheetsCredentials.json",
+  // What is the relative url path to listen to OpenID requests
+  "handler-path": "/signin-google"
+},
+```
+
+* Add these lines to your services startup (ConfigureServices) code :
 
 ```cs
-// Get credential Files for Google Sheets
-var serviceAccountCredentials = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sheetsCredentials.json");
-var clientSecretCredentials = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sheetsClientSecret.json");
-
 // Install both Import and Export modules
-services.AddGoogleSheetsModules(serviceAccountCredentials, clientSecretCredentials);
+services.AddGoogleSheetsModules(true, true);
+```
+* Add these lines to your application startup (Configure) code :
+
+```cs
+// Install the OpenID listener (only needed when ClientID and ClientSecret are used)
+app.UseGoogleOpenID();
 ```
 
 This will also create the database table if needed, so the database connectionstring must be known at this point.
@@ -24,7 +40,4 @@ MicroORM.DatabaseConfiguration.SetDefaultConnectionString(connString);
 
 Things to note :
 * You can also enable only one Module, by setting _enableExportModule_ or _enableImportModule_.
-* You can omit the ClientSecrets file parameter, the module will then use the shared ServiceAccount for creating and uploading the Sheets.
-* When using the ClientSecrets param, each user will see it's own personal version of the created Sheet.
-* When using only the ServiceAccount param, each user will see the same version of the created Sheet.
 * The **Import** module will only show up if the list has an implementation for the _ListDataReceived_ event.
