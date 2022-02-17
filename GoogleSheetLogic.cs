@@ -1,9 +1,14 @@
 ﻿using Google;
 using Google.Apis.Auth.OAuth2;
+using Google.Apis.Auth.OAuth2.Flows;
+using Google.Apis.Auth.OAuth2.Web;
 using Google.Apis.Drive.v3;
 using Google.Apis.Services;
 using Google.Apis.Sheets.v4;
 using Google.Apis.Sheets.v4.Data;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.Extensions.Configuration;
 using Sushi.Mediakiwi.Data;
 using Sushi.Mediakiwi.Framework;
 using Sushi.Mediakiwi.Framework.EventArguments;
@@ -14,60 +19,68 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
     {
         private SheetsService _sheetsService { get; set; }
         private DriveService _driveService { get; set; }
-        private string ClientSecretsFileName { get; set; }
-        private string ServiceAccountSecretsFileName { get; set; }
 
-        public GoogleSheetLogic(string credentialsFileName, string clientSecretsFileName)
+        public bool IsInitialized { get; set; }
+
+        private GoogleSheetsConfig _config { get; set; }
+        public GoogleSheetLogic(IConfiguration configuration)
         {
-            ServiceAccountSecretsFileName = credentialsFileName;
-            ClientSecretsFileName = clientSecretsFileName;
-        }
-
-        private async Task AddAppScript()
-        {
-            if (_sheetsService != null)
-            { 
-
-            }
+            _config = configuration.GetSection("GoogleSheetsSettings").Get<GoogleSheetsConfig>();
         }
 
         #region Initialize Async
 
         public async Task InitializeAsync()
         {
-            if (string.IsNullOrWhiteSpace(ServiceAccountSecretsFileName))
+            if (IsInitialized == false)
             {
-                throw new ArgumentNullException("ServiceAccountSecretsFileName", "A Filename should be provided for the serviceAcccount credentials file");
-            }
-
-            GoogleCredential credential;
-
-            try
-            {
-                using (var stream = new FileStream(ServiceAccountSecretsFileName, FileMode.Open, FileAccess.Read))
+                if (string.IsNullOrWhiteSpace(_config.ServiceAccountFilename) && string.IsNullOrWhiteSpace(_config.ClientID) && string.IsNullOrWhiteSpace(_config.ClientSecret))
                 {
-                    credential = GoogleCredential.FromStream(stream).CreateScoped(new string[] { SheetsService.Scope.Spreadsheets, DriveService.Scope.DriveFile });
+                    throw new ApplicationException("At least one of 'credentialsFileName' or both 'clientId' and 'clientSecret' should be set");
+                }
+
+                GoogleCredential credential;
+
+                if (string.IsNullOrWhiteSpace(_config.ServiceAccountFilename) == false)
+                {
+                    if (File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _config.ServiceAccountFilename)))
+                    {
+                        try
+                        {
+                            using (var stream = new FileStream(_config.ServiceAccountFilename, FileMode.Open, FileAccess.Read))
+                            {
+                                credential = GoogleCredential.FromStream(stream).CreateScoped(new string[] { SheetsService.Scope.Spreadsheets, DriveService.Scope.DriveFile });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine(ex);
+                            throw;
+                        }
+
+                        // Create Google Sheets API service.
+                        _sheetsService = new SheetsService(new BaseClientService.Initializer()
+                        {
+                            HttpClientInitializer = credential,
+                            ApplicationName = nameof(GoogleSheetExportListModule),
+                        });
+
+                        // Create Google Drive API service.
+                        _driveService = new DriveService(new BaseClientService.Initializer()
+                        {
+                            HttpClientInitializer = credential,
+                            ApplicationName = nameof(GoogleSheetExportListModule),
+                        });
+
+                        IsInitialized = true;
+
+                    }
+                    else 
+                    {
+                        throw new ApplicationException($"The supplied file for 'credentialsFileName' ({_config.ServiceAccountFilename}) does not exist");
+                    }
                 }
             }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(ex);
-                throw;
-            }
-
-            // Create Google Sheets API service.
-            _sheetsService = new SheetsService(new BaseClientService.Initializer()
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = nameof(GoogleSheetExportListModule),
-            });
-
-            // Create Google Drive API service.
-            _driveService = new DriveService(new BaseClientService.Initializer()
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = nameof(GoogleSheetExportListModule),
-            });
         }
 
         #endregion Initialize Async
@@ -104,6 +117,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         #endregion Get Sheet Async
 
+        #region Get DropdownValues Async
+
         private async Task<Dictionary<string, string>> GetDropdownValuesAsync(IComponentListTemplate inList, string propertyName)
         {
             Dictionary<string, string> temp = new Dictionary<string, string>();
@@ -116,7 +131,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     foreach (var att in property.GetCustomAttributes(true))
                     {
                         if (att is Framework.ContentListItem.Choice_DropdownAttribute dropdownAtt)
-                        { 
+                        {
                             dropdownAtt.SenderInstance = template;
                             dropdownAtt.Property = property;
 
@@ -150,6 +165,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
             return temp;
         }
+
+        #endregion Get DropdownValues Async
 
         #region Update Sheet Async
 
@@ -264,7 +281,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 #endregion Remove all developer info
 
                 // Check if we have a named range already
-                var namedSheetId = "MK.Columns"; 
+                var namedSheetId = "MK.Columns";
 
                 // Add named range
                 lateRequests.Add(new Request()
@@ -286,7 +303,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         }
                     }
                 });
-                
+
 
                 // Set first row as protected
                 lateRequests.Add(new Request()
@@ -306,7 +323,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         },
                     }
                 });
-                
+
 
                 // Complete data collection
                 IList<RowData> rowsData = new List<RowData>();
@@ -317,7 +334,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     Values = new List<CellData>()
                 };
 
-              
+
                 int colidx = 0;
                 // Add header columns
                 foreach (var col in inList.wim.ListDataColumns.List)
@@ -341,8 +358,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                                     Condition = new BooleanCondition()
                                     {
                                         Type = "ONE_OF_LIST",
-                                        Values = items.Select(x => new ConditionValue() 
-                                        { 
+                                        Values = items.Select(x => new ConditionValue()
+                                        {
                                             UserEnteredValue = x.Key
                                         }).ToList()
                                     },
@@ -719,14 +736,21 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         {
                             Dictionary<string, object> props = new Dictionary<string, object>();
 
-                            foreach (var cellValue in row.Values)
+                            foreach (var cellValue in row.Values.Where(x=>x.UserEnteredValue != null))
                             {
                                 int lookupColidx = row.Values.IndexOf(cellValue);
                                 object value = null;
-
                                 if (cellValue?.EffectiveValue?.NumberValue.HasValue == true && cellValue?.EffectiveFormat?.NumberFormat?.Type?.Equals("DATE_TIME", StringComparison.InvariantCulture) == true)
                                 {
-                                    value = DateTime.FromOADate(cellValue.EffectiveValue.NumberValue.Value);
+                                    var dateTime = DateTime.FromOADate(cellValue.EffectiveValue.NumberValue.Value);
+                                    if (dateTime != DateTime.MinValue)
+                                    {
+                                        value = dateTime;
+                                    }
+                                    else 
+                                    {
+                                        value = null;
+                                    }
                                 }
                                 else if (cellValue?.EffectiveValue?.NumberValue.HasValue == true)
                                 {
@@ -745,7 +769,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                                 props.Add(ColumnPropertyName[lookupColidx], value);
                             }
 
-                            CollectedValues.Add(props);
+                            // Omit total empty rows
+                            if (props?.Any(x => x.Value != null) == true)
+                            {
+                                CollectedValues.Add(props);
+                            }
                         }
 
                         return
@@ -761,7 +789,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                          );
                     }
                 }
-                
+
                 return
                 (
                     success: false,
@@ -817,52 +845,87 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         #region AuthorizeUser
 
-        public async Task AuthorizeUser(IApplicationUser user)
+        public async Task<bool?> AuthorizeUser(IApplicationUser user, HttpContext context)
         {
-            // Only perform User OAuth when the client secrets file is set
-            if (string.IsNullOrWhiteSpace(ClientSecretsFileName))
+            // Only perform User OAuth when the client ID is set
+            if (string.IsNullOrWhiteSpace(_config.ClientID) || string.IsNullOrWhiteSpace(_config.ClientSecret))
             {
-                return;
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(_config?.HandlerPath))
+            {
+                return false;
             }
 
             UserCredential credential;
 
             try
             {
-                using (var stream = new FileStream(ClientSecretsFileName, FileMode.Open, FileAccess.Read))
-                {
-                    credential = GoogleWebAuthorizationBroker.AuthorizeAsync(
-                        (await GoogleClientSecrets.FromStreamAsync(stream)).Secrets,
-                        new string[] { SheetsService.Scope.Spreadsheets, DriveService.Scope.DriveFile },
-                        user.Email,
-                        CancellationToken.None,
-                        new GoogleTokenStore(user, nameof(GoogleSheetExportListModule))
-                        ).Result;
 
-                    Console.WriteLine("Credential file saved to user");
+                IAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow(
+                     new GoogleAuthorizationCodeFlow.Initializer
+                     {
+                         ClientSecrets = new ClientSecrets
+                         {
+                             ClientId = _config.ClientID,
+                             ClientSecret = _config.ClientSecret
+                         },
+                         DataStore = new GoogleTokenStore(user, nameof(GoogleSheetLogic)),
+                         Scopes = new string[] { SheetsService.Scope.Spreadsheets, DriveService.Scope.DriveFile }
+                     }
+                );
+
+                var userId = nameof(GoogleSheetLogic);
+                var uri = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}{_config.HandlerPath}";
+                var code = context.Request.Query["code"].FirstOrDefault();
+                if (code != null)
+                {
+                    var token = await flow.ExchangeCodeForTokenAsync(userId, code, uri.Substring(0, uri.IndexOf("?")), CancellationToken.None);
+
+                    // Extract the right state.
+                    var oauthState = await AuthWebUtility.ExtracRedirectFromState(flow.DataStore, userId, context.Request.Query["state"]);
+                    await context.Response.WriteAsync($"<script>window.open('{oauthState}','_self');</script>");
+                    //context.Response.Redirect(oauthState);
+                }
+                else
+                {
+                    var result = await new AuthorizationCodeWebApp(flow, uri, context.Request.GetDisplayUrl()).AuthorizeAsync(userId, CancellationToken.None);
+
+                    if (result.RedirectUri != null)
+                    {
+                        // Redirect the user to the authorization server.
+                        await context.Response.WriteAsync($"<script>window.open('{result.RedirectUri}','_self');</script>");
+                        return false;
+                    }
+                    else
+                    {
+
+                        // Create Google Sheets API service.
+                        _sheetsService = new SheetsService(new BaseClientService.Initializer()
+                        {
+                            HttpClientInitializer = result.Credential,
+                            ApplicationName = nameof(GoogleSheetExportListModule),
+                        });
+
+                        // Create Google Drive API service.
+                        _driveService = new DriveService(new BaseClientService.Initializer()
+                        {
+                            HttpClientInitializer = result.Credential,
+                            ApplicationName = nameof(GoogleSheetExportListModule),
+                        });
+                    }
                 }
 
+                Console.WriteLine("Google OpenID set");
+                return true;
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine(ex);
                 throw ex;
             }
-
-            // Create Google Sheets API service.
-            _sheetsService = new SheetsService(new BaseClientService.Initializer()
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = nameof(GoogleSheetExportListModule),
-            });
-
-            // Create Google Drive API service.
-            _driveService = new DriveService(new BaseClientService.Initializer()
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = nameof(GoogleSheetExportListModule),
-            });
-
+            return false;
         }
 
         #endregion AuthorizeUser

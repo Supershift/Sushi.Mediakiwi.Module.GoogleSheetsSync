@@ -5,6 +5,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 {
     public class GoogleTokenStore : IDataStore
     {
+
         private IApplicationUser _user { get; set; }
         private string _storeIdentifier { get; set; }
 
@@ -16,77 +17,51 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         public async Task ClearAsync()
         {
-            if (_user?.Data?.HasProperty(_storeIdentifier)==true)
+            foreach (var item in _user.Data.Items)
             {
-                _user.Data.Apply(_storeIdentifier, null);
-                await _user.SaveAsync();
+                if (item.Property.StartsWith(_storeIdentifier, StringComparison.InvariantCulture))
+                {
+                    item.Apply(null);
+                }
             }
+
+            await _user.SaveAsync();
         }
 
         public async Task DeleteAsync<T>(string key)
         {
-            if (_user?.Data?.HasProperty(_storeIdentifier) == true)
-            {
-                Dictionary<string, T> values = new Dictionary<string, T>();
-                var sets = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, T>>(_user.Data[_storeIdentifier].Value);
-                if (sets != null)
-                {
-                    values = sets;
-                }
+            var genKey = GenerateStoredKey(key, typeof(T));
 
-                if (values?.ContainsKey(key) == true)
-                { 
-                    values.Remove(key);
-                    _user.Data.Apply(_storeIdentifier, System.Text.Json.JsonSerializer.Serialize(values));
-                    await _user.SaveAsync();
-                }
+            if (_user?.Data?.HasProperty(genKey) == true)
+            {
+                _user.Data.Apply(genKey, null);
+                await _user.SaveAsync();
             }
         }
 
         public async Task<T> GetAsync<T>(string key)
         {
-            if (_user?.Data?.HasProperty(_storeIdentifier) == true)
-            {
-                Dictionary<string, T> values = new Dictionary<string, T>();
-                var sets = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, T>>(_user.Data[_storeIdentifier].Value);
-                if (sets != null)
-                {
-                    values = sets;
-                }
+            var genKey = GenerateStoredKey(key, typeof(T));
 
-                if (values?.ContainsKey(key) == true)
-                {
-                    return values[key];
-                }
+            if (_user?.Data?.HasProperty(genKey) == true)
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<T>(_user.Data[genKey].Value);
             }
             return default(T);
         }
 
         public async Task StoreAsync<T>(string key, T value)
         {
-            Dictionary<string, T> values = new Dictionary<string, T>();
+            var genKey = GenerateStoredKey(key, typeof(T));
 
-            if (_user?.Data?.HasProperty(_storeIdentifier) == true)
-            {
-                var sets = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, T>>(_user.Data[_storeIdentifier].Value);
-                if (sets != null)
-                {
-                    values = sets;
-                }
-            }
-
-            if (values.ContainsKey(key) == false)
-            {
-                values.Add(key, value);
-            }
-            else 
-            {
-                values[key] = value;
-            }
-
-            _user.Data.Apply(_storeIdentifier, System.Text.Json.JsonSerializer.Serialize(values));
+            _user.Data.Apply(genKey, System.Text.Json.JsonSerializer.Serialize(value));
 
             await _user.SaveAsync();
+        }
+
+        private string GenerateStoredKey(string key, Type t)
+        {
+            return $"{_storeIdentifier}-{t.FullName}-{key}";
         }
     }
 }

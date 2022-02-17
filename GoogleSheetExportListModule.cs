@@ -45,8 +45,18 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         public async Task<ModuleExecutionResult> ExecuteAsync(IComponentListTemplate inList, IApplicationUser inUser, HttpContext context)
         {
+            await Converter.InitializeAsync();
+
             // When this module is User based, authorize the user
-            await Converter.AuthorizeUser(inUser);
+            var authResult = await Converter.AuthorizeUser(inUser, context);
+            if (authResult.HasValue && authResult.Value == false)
+            {
+                return new ModuleExecutionResult()
+                {
+                    IsSuccess = false,
+                    WimNotificationOutput = "Not authenticated"
+                };
+            }
 
             // get existing List Link;
             var sheetListLink = await Data.GoogleSheetListLink.FetchSingleAsync(inList.wim.CurrentList.ID, inUser.ID);
