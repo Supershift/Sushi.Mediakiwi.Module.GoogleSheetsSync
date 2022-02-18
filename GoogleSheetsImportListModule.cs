@@ -103,10 +103,14 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             {
                 await template.OnListDataReceived(convertSheetToListEventResult.listEvent);
 
+                int changedRecordsCount = convertSheetToListEventResult.listEvent.ReceivedProperties.Count(x=>x.ItemType == ReceivedItemTypeEnum.CHANGED);
+                int newRecordsCount = convertSheetToListEventResult.listEvent.ReceivedProperties.Count(x => x.ItemType == ReceivedItemTypeEnum.NEW);
+                int unchangedRecordsCount = convertSheetToListEventResult.listEvent.ReceivedProperties.Count(x => x.ItemType == ReceivedItemTypeEnum.UNCHANGED);
+
                 return new ModuleExecutionResult()
                 {
                     IsSuccess = true,
-                    WimNotificationOutput = $"Received {convertSheetToListEventResult.listEvent.ReceivedProperties.Count} rows from Google Sheets"
+                    WimNotificationOutput = $"Received {convertSheetToListEventResult.listEvent.ReceivedProperties.Count} rows from Google Sheets.<br/>{changedRecordsCount} rows were changed, {newRecordsCount} rows were added and {unchangedRecordsCount} rows were left unchanged"
                 };
             }
             else 

@@ -22,7 +22,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         public string IconURL { get; set; }
 
-        public string Tooltip { get; set; } = "View this list in Google Sheets";
+        public string Tooltip { get; set; } = "Export this list to Google Sheets";
 
         public bool ConfirmationNeeded { get; set; }
 
@@ -123,5 +123,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         }
 
         #endregion Show On List
+
+
     }
 }
