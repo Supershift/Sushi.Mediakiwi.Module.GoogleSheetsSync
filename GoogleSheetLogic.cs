@@ -284,7 +284,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 var namedSheetId = "MK.Columns";
 
                 // Add named range
-                lateRequests.Add(new Request()
+                requests.Add(new Request()
                 {
                     AddNamedRange = new AddNamedRangeRequest()
                     {
@@ -306,7 +306,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
 
                 // Set first row as protected
-                lateRequests.Add(new Request()
+                requests.Add(new Request()
                 {
                     AddProtectedRange = new AddProtectedRangeRequest()
                     {
@@ -314,12 +314,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         {
                             NamedRangeId = namedSheetId,
                             Description = "These columns should match the ones exported from Mediakiwi",
-                            Editors = new Editors()
-                            {
-                                Users = new List<string>(),
-                                DomainUsersCanEdit = false,
-                                Groups = new List<string>(),
-                            },
+                            WarningOnly = false
                         },
                     }
                 });
@@ -561,10 +556,37 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                                 StringValue = rawData.ToString()
                             };
                         }
-                        rowData.Values.Add(cellData);
 
+                        rowData.Values.Add(cellData);
                     }
+
                     rowsData.Add(rowData);
+
+                    // Get row Index for inserting hash
+                    int rowIdx = rowsData.IndexOf(rowData);
+
+                    lateRequests.Add(new Request()
+                    {
+                        CreateDeveloperMetadata = new CreateDeveloperMetadataRequest()
+                        {
+                            DeveloperMetadata = new DeveloperMetadata()
+                            {
+                                Location = new DeveloperMetadataLocation()
+                                {
+                                    DimensionRange = new DimensionRange()
+                                    {
+                                        Dimension = "ROWS",
+                                        EndIndex = rowIdx + 1,
+                                        StartIndex = rowIdx,
+                                        SheetId = currentSheet.Properties.SheetId
+                                    }
+                                },
+                                MetadataKey = "rowHash",
+                                MetadataValue = GoogleValueHasher.CreateHash(rowData.Values),
+                                Visibility = "DOCUMENT",
+                            }
+                        }
+                    });
                 }
 
                 // Update the SpreadSheet data
@@ -678,7 +700,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         public async Task<(bool success, string errorMessage, ComponentListDataReceived? listEvent)> ConvertSheetToListDataReceivedEvent(Data.GoogleSheetListLink sheetListLink, IComponentListTemplate inList)
         {
             // Collected Values Container
-            List<Dictionary<string, object>> CollectedValues = new List<Dictionary<string, object>>();
+            List<ComponentListDataReceivedItem> CollectedValues = new List<ComponentListDataReceivedItem>();
 
             // Check if the link exists
             if (sheetListLink?.ID > 0)
@@ -703,6 +725,9 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
                         // Lookup table for property types
                         Dictionary<int, Type> ColumnPropertyType = new Dictionary<int, Type>();
+
+                        // Lookup table for value Hashes
+                        Dictionary<int, string> originalRowHash = new Dictionary<int, string>();
 
                         // First get a column index -> propertyName mapping
                         foreach (var metaData in sheetData?.ColumnMetadata?.Where(x => x.DeveloperMetadata?.Count > 0))
@@ -730,15 +755,41 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                             }
                         }
 
+                        // Then get a row index -> hash mapping
+                        foreach (var metaData in sheetData?.RowMetadata?.Where(x => x.DeveloperMetadata?.Count > 0))
+                        {
+                            foreach (var devMetaData in metaData.DeveloperMetadata?.Where(x => x.MetadataKey.Equals("rowHash", StringComparison.InvariantCultureIgnoreCase)))
+                            {
+                                var targetIdx = devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1);
+                                if (originalRowHash.ContainsKey(targetIdx) == false)
+                                {
+                                    originalRowHash[devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1)] = devMetaData.MetadataValue;
+                                }
+                            }
+                        }
+
 
                         // Loop through rows, skipping the first (header) row
                         foreach (var row in sheetData.RowData.Skip(1))
                         {
+                            // Get the current row index
+                            int rowIdx = sheetData.RowData.IndexOf(row);
+
+                            // Maintains a dictionary of the propertynames, coupled to a value
                             Dictionary<string, object> props = new Dictionary<string, object>();
 
-                            foreach (var cellValue in row.Values.Where(x=>x.UserEnteredValue != null))
+                            // Maintains a dictionary of the cell values which we're included during export.
+                            // this is needed to create a hash based on the correct columns
+                            List<CellData> includedCells = new List<CellData>();
+
+                            // Only extract values from columns we originally provided.
+                            foreach (var cellValue in row.Values.Take(ColumnPropertyName.Count))
                             {
                                 int lookupColidx = row.Values.IndexOf(cellValue);
+
+                                // This column was included during export, so must be included in the hash
+                                includedCells.Add(cellValue);
+
                                 object value = null;
                                 if (cellValue?.EffectiveValue?.NumberValue.HasValue == true && cellValue?.EffectiveFormat?.NumberFormat?.Type?.Equals("DATE_TIME", StringComparison.InvariantCulture) == true)
                                 {
@@ -747,7 +798,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                                     {
                                         value = dateTime;
                                     }
-                                    else 
+                                    else
                                     {
                                         value = null;
                                     }
@@ -772,7 +823,30 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                             // Omit total empty rows
                             if (props?.Any(x => x.Value != null) == true)
                             {
-                                CollectedValues.Add(props);
+                                // Determine the type
+                                ReceivedItemTypeEnum itemType = ReceivedItemTypeEnum.NEW;
+
+                                // Determine if this type was changed
+                                if (originalRowHash.ContainsKey(rowIdx))
+                                {
+                                    // Create hash from current rows
+                                    var currentRowHash = GoogleValueHasher.CreateHash(includedCells);
+
+                                    if (currentRowHash.Equals(originalRowHash[rowIdx]))
+                                    {
+                                        itemType = ReceivedItemTypeEnum.UNCHANGED;
+                                    }
+                                    else
+                                    {
+                                        itemType = ReceivedItemTypeEnum.CHANGED;
+                                    }
+                                }
+
+                                CollectedValues.Add(new ComponentListDataReceivedItem() 
+                                { 
+                                    PropertyValues = props,
+                                    ItemType = itemType
+                                });
                             }
                         }
 

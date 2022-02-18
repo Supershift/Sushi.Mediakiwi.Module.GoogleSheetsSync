@@ -38,8 +38,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                           {
                               ClientSecrets = new ClientSecrets
                               {
-                                  ClientId = config["GoogleSheetsCredentials:client-id"],
-                                  ClientSecret = config["GoogleSheetsCredentials:client-secret"]
+                                  ClientId = config["GoogleSheetsSettings:client-id"],
+                                  ClientSecret = config["GoogleSheetsSettings:client-secret"]
                               },
                               DataStore = new GoogleTokenStore(user, UserID),
                               Scopes = new string[] { SheetsService.Scope.Spreadsheets, DriveService.Scope.DriveFile }

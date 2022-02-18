@@ -33,17 +33,14 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         /// <summary>
         /// Adds the google sheets modules
         /// </summary>
-        /// <param name="services"></param>
         /// <param name="services">The current service collection</param>
-        /// <param name="serviceAccountCredentialsFileName">The filename to the file containing the serviceaccount credentials</param>
-        /// <param name="clientId">The OAuth client ID</param>
-        /// <param name="clientSecret">The OAuth client Secret</param>
         /// <param name="enableExportModule">Enable the export module ?</param>
+        /// <param name="enableViewModule">Enable the view module ?</param>
         /// <param name="enableImportModule">Enable the import module ?</param>
-        public static void AddGoogleSheetsModules(this IServiceCollection services, bool enableExportModule, bool enableImportModule)
+        public static void AddGoogleSheetsModules(this IServiceCollection services, bool enableExportModule, bool enableViewModule, bool enableImportModule)
         {
             // Do nothing
-            if (enableExportModule == false && enableImportModule == false)
+            if (enableExportModule == false && enableImportModule == false && enableViewModule == false)
             {
                 return;
             }
@@ -52,17 +49,22 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             Task.Run(async () => await ModuleInstaller.InstallWhenNeededAsync());
 
             // Add the Sheets Logic
-            services.AddSingleton<GoogleSheetLogic>();
+            services.AddScoped<GoogleSheetLogic>();
 
-            // Add the two modules
+            // Add the modules
+            if (enableViewModule)
+            {
+                services.AddScoped(typeof(IListModule), typeof(GoogleSheetsViewModule));
+            }
+
             if (enableExportModule)
             {
-                services.AddSingleton(typeof(IListModule), typeof(GoogleSheetExportListModule));
+                services.AddScoped(typeof(IListModule), typeof(GoogleSheetExportListModule));
             }
 
             if (enableImportModule)
             {
-                services.AddSingleton(typeof(IListModule), typeof(GoogleSheetsImportListModule));
+                services.AddScoped(typeof(IListModule), typeof(GoogleSheetsImportListModule));
             }
         }
     }
