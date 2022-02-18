@@ -25,17 +25,18 @@ Installation steps :
 // Install all included modules
 services.AddGoogleSheetsModules(true, true, true);
 ```
-* Add these lines to your application startup (Configure) code :
-
-```cs
-// Install the OpenID listener (only needed when ClientID and ClientSecret are used)
-app.UseGoogleOpenID();
-```
-
 This will also create the database table if needed, so the database connectionstring must be known at this point.
 This can be done with :
 ```cs
 MicroORM.DatabaseConfiguration.SetDefaultConnectionString(connString);
+```
+
+* Add these lines to your application startup (Configure) code, before the call to _app.UseMediakiwi()_
+ :
+
+```cs
+// Install the OpenID listener (only needed when ClientID and ClientSecret are used)
+app.UseGoogleOpenID();
 ```
 
 Things to note :
