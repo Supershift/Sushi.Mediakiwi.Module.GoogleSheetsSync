@@ -22,8 +22,8 @@ Installation steps :
 * Add these lines to your services startup (ConfigureServices) code :
 
 ```cs
-// Install both Import and Export modules
-services.AddGoogleSheetsModules(true, true);
+// Install all included modules
+services.AddGoogleSheetsModules(true, true, true);
 ```
 * Add these lines to your application startup (Configure) code :
 
@@ -39,5 +39,5 @@ MicroORM.DatabaseConfiguration.SetDefaultConnectionString(connString);
 ```
 
 Things to note :
-* You can also enable only one Module, by setting _enableExportModule_ or _enableImportModule_.
+* You can also enable only one Module, by setting _enableExportModule_, _enableViewModule_ or _enableImportModule_.
 * The **Import** module will only show up if the list has an implementation for the _ListDataReceived_ event.
