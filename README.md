@@ -22,22 +22,23 @@ Installation steps :
 * Add these lines to your services startup (ConfigureServices) code :
 
 ```cs
-// Install both Import and Export modules
-services.AddGoogleSheetsModules(true, true);
+// Install all included modules
+services.AddGoogleSheetsModules(true, true, true);
 ```
-* Add these lines to your application startup (Configure) code :
-
-```cs
-// Install the OpenID listener (only needed when ClientID and ClientSecret are used)
-app.UseGoogleOpenID();
-```
-
 This will also create the database table if needed, so the database connectionstring must be known at this point.
 This can be done with :
 ```cs
 MicroORM.DatabaseConfiguration.SetDefaultConnectionString(connString);
 ```
 
+* Add these lines to your application startup (Configure) code, before the call to _app.UseMediakiwi()_
+ :
+
+```cs
+// Install the OpenID listener (only needed when ClientID and ClientSecret are used)
+app.UseGoogleOpenID();
+```
+
 Things to note :
-* You can also enable only one Module, by setting _enableExportModule_ or _enableImportModule_.
+* You can also enable only one Module, by setting _enableExportModule_, _enableViewModule_ or _enableImportModule_.
 * The **Import** module will only show up if the list has an implementation for the _ListDataReceived_ event.
