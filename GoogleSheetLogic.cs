@@ -417,7 +417,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 // Add Developer MetaData for Header Columns
                 foreach (var col in inList.wim.ListDataColumns.List)
                 {
-                    var colIdx = inList.wim.ListDataColumns.List.IndexOf(col) + 1;
+                    var colIdx = inList.wim.ListDataColumns.List.IndexOf(col);
 
                     devMetaData.Add(new DeveloperMetadata()
                     {
@@ -425,8 +425,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         {
                             DimensionRange = new DimensionRange()
                             {
-                                StartIndex = colIdx,
-                                EndIndex = colIdx + 1,
+                                StartIndex = colIdx + 1,
+                                EndIndex = colIdx + 2,
                                 SheetId = currentSheet.Properties.SheetId,
                                 Dimension = "COLUMNS"
                             },
@@ -440,22 +440,78 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     // Add the type of the property this column represents
                     if (listItemType != null)
                     {
+                        Type propertyType = listItemType.GetProperty(col.ColumnValuePropertyName).PropertyType;
                         devMetaData.Add(new DeveloperMetadata()
                         {
                             Location = new DeveloperMetadataLocation()
                             {
                                 DimensionRange = new DimensionRange()
                                 {
-                                    StartIndex = colIdx,
-                                    EndIndex = colIdx + 1,
+                                    StartIndex = colIdx + 1,
+                                    EndIndex = colIdx + 2,
                                     SheetId = currentSheet.Properties.SheetId,
                                     Dimension = "COLUMNS"
                                 },
                             },
                             MetadataKey = "propertyType",
-                            MetadataValue = listItemType.GetProperty(col.ColumnValuePropertyName).PropertyType.FullName,
+                            MetadataValue = propertyType.FullName,
                             Visibility = "DOCUMENT",
                         });
+
+                        if (propertyType == typeof(bool) || propertyType == typeof(bool?))
+                        {
+                            lateRequests.Add(new Request()
+                            {
+                                RepeatCell = new RepeatCellRequest()
+                                {
+                                    Cell = new CellData()
+                                    {
+                                        DataValidation = new DataValidationRule()
+                                        {
+                                            Condition = new BooleanCondition()
+                                            {
+                                                Type = "BOOLEAN"
+                                            }
+                                        }
+                                    },
+                                    Range = new GridRange()
+                                    {
+                                        SheetId = currentSheet.Properties.SheetId,
+                                        StartColumnIndex = colIdx,
+                                        EndColumnIndex = colIdx + 1,
+                                        StartRowIndex = 1,
+                                    },
+                                    Fields = "dataValidation"
+                                }
+                            });
+                        }
+                        else if (propertyType == typeof(DateTime) || propertyType == typeof(DateTime?))
+                        {
+                            lateRequests.Add(new Request()
+                            {
+                                RepeatCell = new RepeatCellRequest()
+                                {
+                                    Cell = new CellData()
+                                    {
+                                        DataValidation = new DataValidationRule()
+                                        {
+                                            Condition = new BooleanCondition()
+                                            {
+                                                Type = "DATE_IS_VALID"
+                                            }
+                                        }
+                                    },
+                                    Range = new GridRange()
+                                    {
+                                        SheetId = currentSheet.Properties.SheetId,
+                                        StartColumnIndex = colIdx,
+                                        EndColumnIndex = colIdx + 1,
+                                        StartRowIndex = 1,
+                                    },
+                                    Fields = "dataValidation"
+                                }
+                            });
+                        }
                     }
                 }
 
