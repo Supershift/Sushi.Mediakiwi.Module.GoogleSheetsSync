@@ -4,13 +4,13 @@
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Company>Supershift</Company>
     <Authors>Mark Rienstra</Authors>
     <Product>Mediakiwi</Product>
     <Copyright>2022 Supershift</Copyright>
     <PackageProjectUrl>https://github.com/Supershift/Sushi.Mediakiwi.Module.GoogleSheetsSync</PackageProjectUrl>
-    <Description>Contains an import and export module for Google Sheets</Description>
+    <Description>Contains an import, export and view module for Google Sheets</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/Supershift/Sushi.Mediakiwi.Module.GoogleSheetsSync</RepositoryUrl>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>

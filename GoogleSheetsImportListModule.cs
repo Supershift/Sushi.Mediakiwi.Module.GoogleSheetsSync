@@ -97,28 +97,40 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             var sheetListLink = await Data.GoogleSheetListLink.FetchSingleAsync(inList.wim.CurrentList.ID, inUser.ID);
 
             // Convert the sheet to a list Event
-            var convertSheetToListEventResult = await Converter.ConvertSheetToListDataReceivedEvent(sheetListLink, inList);
-
-            if (convertSheetToListEventResult.success && inList is ComponentListTemplate template)
+            try
             {
-                await template.OnListDataReceived(convertSheetToListEventResult.listEvent);
+                var convertSheetToListEventResult = await Converter.ConvertSheetToListDataReceivedEvent(sheetListLink, inList);
 
-                int changedRecordsCount = convertSheetToListEventResult.listEvent.ReceivedProperties.Count(x=>x.ItemType == ReceivedItemTypeEnum.CHANGED);
-                int newRecordsCount = convertSheetToListEventResult.listEvent.ReceivedProperties.Count(x => x.ItemType == ReceivedItemTypeEnum.NEW);
-                int unchangedRecordsCount = convertSheetToListEventResult.listEvent.ReceivedProperties.Count(x => x.ItemType == ReceivedItemTypeEnum.UNCHANGED);
-
-                return new ModuleExecutionResult()
+                if (convertSheetToListEventResult.success && inList is ComponentListTemplate template)
                 {
-                    IsSuccess = true,
-                    WimNotificationOutput = $"Received {convertSheetToListEventResult.listEvent.ReceivedProperties.Count} rows from Google Sheets.<br/>{changedRecordsCount} rows were changed, {newRecordsCount} rows were added and {unchangedRecordsCount} rows were left unchanged"
-                };
+                    await template.OnListDataReceived(convertSheetToListEventResult.listEvent);
+
+                    int changedRecordsCount = convertSheetToListEventResult.listEvent.ReceivedProperties.Count(x => x.ItemType == ReceivedItemTypeEnum.CHANGED);
+                    int newRecordsCount = convertSheetToListEventResult.listEvent.ReceivedProperties.Count(x => x.ItemType == ReceivedItemTypeEnum.NEW);
+                    int unchangedRecordsCount = convertSheetToListEventResult.listEvent.ReceivedProperties.Count(x => x.ItemType == ReceivedItemTypeEnum.UNCHANGED);
+
+                    return new ModuleExecutionResult()
+                    {
+                        IsSuccess = true,
+                        WimNotificationOutput = $"Received {convertSheetToListEventResult.listEvent.ReceivedProperties.Count} rows from Google Sheets.<br/>{changedRecordsCount} rows were changed, {newRecordsCount} rows were added and {unchangedRecordsCount} rows were left unchanged"
+                    };
+                }
+                else
+                {
+                    return new ModuleExecutionResult()
+                    {
+                        IsSuccess = false,
+                        WimNotificationOutput = "Could not find a link to a Google Sheets file"
+                    };
+                }
             }
-            else 
+            catch (Exception ex)
             {
+                await Notification.InsertOneAsync(nameof(GoogleSheetsImportListModule), ex);
                 return new ModuleExecutionResult()
                 {
                     IsSuccess = false,
-                    WimNotificationOutput = "Could not find a link to a Google Sheets file"
+                    WimNotificationOutput = "Something went wrong importing the list from Google Sheets, please check notifications for more information"
                 };
             }
         }

@@ -78,13 +78,25 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             var existingSheet = await Converter.GetSheetAsync(sheetId);
             if (existingSheet != null)
             {
-                await Converter.UpdateSheetAsync(inList, existingSheet, sheetListLink);
-                return new ModuleExecutionResult()
+                try
                 {
-                    IsSuccess = true,
-                    WimNotificationOutput = $"Google Sheet exists : <a href=\"{existingSheet.SpreadsheetUrl}\" target=\"_blank\">View here</a>",
-                    RedirectUrl = existingSheet.SpreadsheetUrl
-                };
+                    await Converter.UpdateSheetAsync(inList, existingSheet, sheetListLink);
+                    return new ModuleExecutionResult()
+                    {
+                        IsSuccess = true,
+                        WimNotificationOutput = $"Google Sheet exists : <a href=\"{existingSheet.SpreadsheetUrl}\" target=\"_blank\">View here</a>",
+                        RedirectUrl = existingSheet.SpreadsheetUrl
+                    };
+                }
+                catch (Exception ex)
+                {
+                    await Notification.InsertOneAsync(nameof(GoogleSheetExportListModule), ex);
+                    return new ModuleExecutionResult()
+                    {
+                        IsSuccess = false,
+                        WimNotificationOutput = "Something went wrong exporting the list to Google Sheets, please check notifications for more information"
+                    };
+                }
             }
             // No spreadsheet exists
             else 
@@ -92,15 +104,27 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 var newspreadSheet = await Converter.CreateSheetAsync(inList);
                 if (newspreadSheet != null)
                 {
-                    await Converter.UpdateSheetAsync(inList, newspreadSheet, sheetListLink);
-
-                    // Spreedsheet created,
-                    return new ModuleExecutionResult()
+                    try
                     {
-                        IsSuccess = true,
-                        WimNotificationOutput = $"Google Sheet created : <a href=\"{newspreadSheet.SpreadsheetUrl}\" target=\"_blank\">View here</a>",
-                        RedirectUrl = newspreadSheet.SpreadsheetUrl
-                    };
+                        await Converter.UpdateSheetAsync(inList, newspreadSheet, sheetListLink);
+
+                        // Spreedsheet created,
+                        return new ModuleExecutionResult()
+                        {
+                            IsSuccess = true,
+                            WimNotificationOutput = $"Google Sheet created : <a href=\"{newspreadSheet.SpreadsheetUrl}\" target=\"_blank\">View here</a>",
+                            RedirectUrl = newspreadSheet.SpreadsheetUrl
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        await Notification.InsertOneAsync(nameof(GoogleSheetExportListModule), ex);
+                        return new ModuleExecutionResult()
+                        {
+                            IsSuccess = false,
+                            WimNotificationOutput = "Something went wrong exporting the list to Google Sheets, please check notifications for more information"
+                        };
+                    }
                 }
                 else
                 {
@@ -119,6 +143,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         public bool ShowOnList(IComponentListTemplate inList, IApplicationUser inUser)
         {
+            if (inList?.wim?.CanContainSingleInstancePerDefinedList == true)
+            {
+                return false;
+            }
+
             return true;
         }
 
