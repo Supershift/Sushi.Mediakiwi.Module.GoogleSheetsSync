@@ -184,7 +184,12 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 inList.wim.GridDataCommunication.ShowAll = true;
                 inList.wim.GridDataCommunication.PageSize = 10000;
 
-                inList.wim.DoListSearch();
+                if (inList.wim.Console.Component == null)
+                {
+                    inList.wim.Console.Component = new Beta.GeneratedCms.Source.Component();
+                }
+
+                await inList.wim.Console.Component.CreateSearchListAsync(inList.wim.Console, 0);
 
                 // Get first sheet
                 var currentSheet = currentSpreadSheet.Sheets.FirstOrDefault();
@@ -278,7 +283,37 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     }
                 });
 
+                requests.Add(new Request()
+                {
+                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest()
+                    {
+                        DataFilter = new DataFilter()
+                        {
+                            DeveloperMetadataLookup = new DeveloperMetadataLookup()
+                            {
+                                MetadataKey = "rowHash"
+                            }
+                        }
+                    }
+                });
+
                 #endregion Remove all developer info
+
+                #region Remove existing cells
+
+                requests.Add(new Request()
+                {
+                    UpdateCells = new UpdateCellsRequest()
+                    {
+                        Range = new GridRange()
+                        {
+                            SheetId = currentSheet.Properties.SheetId,
+                        },
+                        Fields = "userEnteredValue"
+                    }
+                });
+
+                #endregion Remove existing cells
 
                 // Check if we have a named range already
                 var namedSheetId = "MK.Columns";
@@ -621,7 +656,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     }
                 });
 
-                // Run all requests
+                 // Run all requests
                 if (requests?.Count > 0)
                 {
                     BatchUpdateSpreadsheetRequest requestBody = new BatchUpdateSpreadsheetRequest();
