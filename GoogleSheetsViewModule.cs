@@ -48,7 +48,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             var listLink = Task.Run(async () => await Data.GoogleSheetListLink.FetchSingleAsync(inList.wim.CurrentList.ID, inUser.ID)).Result;
             var hasListLink = string.IsNullOrWhiteSpace(listLink?.SheetUrl) == false;
 
-            return hasListLink;
+            return hasListLink && inList?.wim?.CurrentList?.Option_HasExportXLS == true;
         }
 
         #endregion Properties

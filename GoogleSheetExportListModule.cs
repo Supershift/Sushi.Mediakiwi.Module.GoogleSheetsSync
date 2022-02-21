@@ -143,7 +143,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         public bool ShowOnList(IComponentListTemplate inList, IApplicationUser inUser)
         {
-            if (inList?.wim?.CanContainSingleInstancePerDefinedList == true)
+            if (inList?.wim?.CanContainSingleInstancePerDefinedList == true || inList?.wim?.CurrentList?.Option_HasExportXLS == false)
             {
                 return false;
             }
@@ -152,7 +152,5 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         }
 
         #endregion Show On List
-
-
     }
 }
