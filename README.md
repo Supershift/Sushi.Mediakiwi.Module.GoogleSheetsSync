@@ -31,8 +31,7 @@ This can be done with :
 MicroORM.DatabaseConfiguration.SetDefaultConnectionString(connString);
 ```
 
-* Add these lines to your application startup (Configure) code, before the call to _app.UseMediakiwi()_
- :
+* Add these lines to your application startup (Configure) code, before the call to _app.UseMediakiwi()_ :
 
 ```cs
 // Install the OpenID listener (only needed when ClientID and ClientSecret are used)
@@ -42,3 +41,5 @@ app.UseGoogleOpenID();
 Things to note :
 * You can also enable only one Module, by setting _enableExportModule_, _enableViewModule_ or _enableImportModule_.
 * The **Import** module will only show up if the list has an implementation for the _ListDataReceived_ event.
+* The **Export** module will only show up if the list has the setting for _XLS export_ enabled.
+* The **View** module will only show up when a last has been exported at least once.
