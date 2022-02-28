@@ -1037,7 +1037,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                              ClientSecret = _config.ClientSecret
                          },
                          DataStore = new GoogleTokenStore(user, nameof(GoogleSheetLogic)),
-                         Scopes = new string[] { SheetsService.Scope.Spreadsheets, DriveService.Scope.DriveFile }
+                         Scopes = new string[] 
+                         { 
+                             SheetsService.Scope.Spreadsheets, 
+                             DriveService.Scope.DriveFile 
+                         }
                      }
                 );
 
