@@ -1,5 +1,6 @@
 # Sushi.Mediakiwi.Module.GoogleSheetsSync
-A list module for use in Mediakiwi which allows for synchronizing data with GoogleSheets
+A list module for use in Mediakiwi which allows for synchronizing data with GoogleSheets. 
+This Module can be used in two ways.
 
 ## 1. Using a Google Service Account ##
 
