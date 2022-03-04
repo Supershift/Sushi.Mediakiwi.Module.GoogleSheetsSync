@@ -51,4 +51,4 @@ A Service Account has now been created, next we need to download the credentials
 * In the modal that opens, choose the _JSON_ option and click _Create_.
 * A JSON file will be downloaded containing the authentication information for our Service Account.
 
-Continue with the apprioprate step [Readme](readme.md)
+Continue with the apprioprate step [Readme](README.md)
