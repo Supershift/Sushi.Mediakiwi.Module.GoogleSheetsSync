@@ -15,7 +15,7 @@ If you want to use this option, take a look at [The needed steps for creating Se
 
 ```JSON
 "GoogleSheetsSettings": {
-  // The relative filename for the AerviceAccount credentials file
+  // The relative filename for the ServiceAccount credentials file
   "service-account-filename": "sheetsCredentials.json",
 },
 ```
@@ -68,4 +68,4 @@ Things to note :
 * You can also enable only one Module, by setting _enableExportModule_, _enableViewModule_ or _enableImportModule_.
 * The **Import** module will only show up if the list has an implementation for the _ListDataReceived_ event.
 * The **Export** module will only show up if the list has the setting for _XLS export_ enabled.
-* The **View** module will only show up when a last has been exported at least once.
+* The **View** module will only show up when a list has been exported at least once.
