@@ -64,4 +64,13 @@ the steps needed for this are as follows :
   * A YouTube video explaining the app you're building and the need for using Google Sheets.  
 * Confirm domain ownership, you will receive an email from Google saying you need to confirm domain ownership.
 
+## 6. Get Client information for use in settings ##
+
+* Click on the hamburger menu icon in the topleft corner of the page.
+* Click on _API's & Services_ in the opened menu.
+* Click on _Credentials_ in the submenu.
+* Click on the OAuth credential we've created.
+* You can find the Client ID on the right side of the page, copy that information.
+* You can find the Client secret on the right side of the page, copy that information.
+
 When your project is validated continue with the apprioprate step [Readme](README.md)
