@@ -760,14 +760,35 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
                 if (responseCreate != null)
                 {
+                    List<string> allowedDomains = new List<string>();
 
-                    Google.Apis.Drive.v3.Data.Permission perms = new Google.Apis.Drive.v3.Data.Permission();
-                    perms.Role = "writer";
-                    perms.Type = "domain";
-                    perms.Domain = "supershift.nl";
+                    if (_config?.AllowedDomains?.Length > 0)
+                    {
+                        allowedDomains = _config.AllowedDomains.ToList();
+                    }
+                    else
+                    {
+                        allowedDomains.Add("supershift.nl");
+                    }
 
-                    // Set permissions
-                    await _driveService.Permissions.Create(perms, responseCreate.SpreadsheetId).ExecuteAsync();
+                    foreach (var domain in allowedDomains)
+                    {
+                        Google.Apis.Drive.v3.Data.Permission perms = new Google.Apis.Drive.v3.Data.Permission();
+
+                        perms.Role = "writer";
+                        perms.Type = "domain";
+                        perms.Domain = domain;
+
+                        // Add all tasks to array
+                        try
+                        {
+                            await _driveService.Permissions.Create(perms, responseCreate.SpreadsheetId).ExecuteAsync();
+                        }
+                        catch (GoogleApiException ex)
+                        {
+                            await Notification.InsertOneAsync("PriceListGenerator.CreateSheetAsync", ex);
+                        }
+                    }
 
                     return responseCreate;
                 }
