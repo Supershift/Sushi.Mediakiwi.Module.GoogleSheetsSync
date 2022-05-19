@@ -80,11 +80,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             {
                 try
                 {
-                    await Converter.UpdateSheetAsync(inList, existingSheet, sheetListLink);
+                    var returnMessage = await Converter.UpdateSheetAsync(inList, existingSheet, sheetListLink);
                     return new ModuleExecutionResult()
                     {
                         IsSuccess = true,
-                        WimNotificationOutput = $"Google Sheet exists : <a href=\"{existingSheet.SpreadsheetUrl}\" target=\"_blank\">View here</a>",
+                        WimNotificationOutput = $"Google Sheet exists : <a href=\"{existingSheet.SpreadsheetUrl}\" target=\"_blank\">View here</a><br/>{returnMessage}",
                         RedirectUrl = existingSheet.SpreadsheetUrl
                     };
                 }
@@ -106,13 +106,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 {
                     try
                     {
-                        await Converter.UpdateSheetAsync(inList, newspreadSheet, sheetListLink);
+                        var returnMessage = await Converter.UpdateSheetAsync(inList, newspreadSheet, sheetListLink);
 
                         // Spreedsheet created,
                         return new ModuleExecutionResult()
                         {
                             IsSuccess = true,
-                            WimNotificationOutput = $"Google Sheet created : <a href=\"{newspreadSheet.SpreadsheetUrl}\" target=\"_blank\">View here</a>",
+                            WimNotificationOutput = $"Google Sheet created : <a href=\"{newspreadSheet.SpreadsheetUrl}\" target=\"_blank\">View here</a><br/>{returnMessage}",
                             RedirectUrl = newspreadSheet.SpreadsheetUrl
                         };
                     }

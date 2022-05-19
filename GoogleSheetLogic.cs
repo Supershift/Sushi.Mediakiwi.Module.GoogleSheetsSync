@@ -17,6 +17,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 {
     internal class GoogleSheetLogic
     {
+        private const int MAX_DEVELOPERDATA_SIZE = 30000;
+
         private SheetsService _sheetsService { get; set; }
         private DriveService _driveService { get; set; }
 
@@ -170,8 +172,9 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         #region Update Sheet Async
 
-        public async Task UpdateSheetAsync(IComponentListTemplate inList, Spreadsheet currentSpreadSheet, Data.GoogleSheetListLink listLink)
+        public async Task<string> UpdateSheetAsync(IComponentListTemplate inList, Spreadsheet currentSpreadSheet, Data.GoogleSheetListLink listLink)
         {
+            string returnMessage = "";
             var valueRange = new ValueRange();
             valueRange.Values = new List<IList<object>>();
             if (currentSpreadSheet != null)
@@ -562,6 +565,26 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     });
                 }
 
+                // Make sure that the amount of rows are going to fit.
+                // The normal max rowcount for Google Sheets is 1000.
+                requests.Add(new Request()
+                {
+                    UpdateSheetProperties = new UpdateSheetPropertiesRequest()
+                    {
+                        Properties = new SheetProperties()
+                        {
+                            SheetId = currentSheet.Properties.SheetId,
+                            Title = string.IsNullOrWhiteSpace(currentSheet.Properties.Title) ? "Sheet 1" : currentSheet.Properties.Title,
+                            GridProperties = new GridProperties()
+                            {
+                                RowCount = inList.wim.ListDataCollection.Count + 1,
+                                ColumnCount = colidx + 1
+                            }
+                        },
+                        Fields = "*",
+                    }
+                });
+
                 // Loop through items
                 foreach (var item in inList.wim.ListDataCollection)
                 {
@@ -670,7 +693,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                                         EndIndex = rowIdx + 1,
                                         StartIndex = rowIdx,
                                         SheetId = currentSheet.Properties.SheetId
-                                    }
+                                    } 
                                 },
                                 MetadataKey = "rowHash",
                                 MetadataValue = GoogleValueHasher.CreateHash(rowData.Values),
@@ -712,7 +735,28 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     }
                 });
 
-                 // Run all requests
+                // Determine if devdata can be added, depending on size
+                int sizeLeft = MAX_DEVELOPERDATA_SIZE;
+                foreach (var item in requests.Where(x => x.CreateDeveloperMetadata != null))
+                {
+                    sizeLeft -= item.CreateDeveloperMetadata.DeveloperMetadata.MetadataKey.Length;
+                    sizeLeft -= item.CreateDeveloperMetadata.DeveloperMetadata.MetadataValue.Length;
+                }
+
+                foreach (var item in lateRequests.Where(x => x.CreateDeveloperMetadata != null))
+                {
+                    sizeLeft -= item.CreateDeveloperMetadata.DeveloperMetadata.MetadataKey.Length;
+                    sizeLeft -= item.CreateDeveloperMetadata.DeveloperMetadata.MetadataValue.Length;
+                }
+
+                // The developer metadata is too big, remove the rowhash
+                if (sizeLeft < 1)
+                {
+                    lateRequests.RemoveAll(x => x.CreateDeveloperMetadata?.DeveloperMetadata?.MetadataKey.Equals("rowHash") == true);
+                    returnMessage = "Change tracking is disabled, too much data to keep track of.";
+                }
+
+                // Run all requests
                 if (requests?.Count > 0)
                 {
                     BatchUpdateSpreadsheetRequest requestBody = new BatchUpdateSpreadsheetRequest();
@@ -727,6 +771,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 listLink.LastExport = DateTime.UtcNow;
                 await listLink.SaveAsync();
             }
+
+            return returnMessage;
         }
         #endregion Update Sheet Async
 
@@ -799,6 +845,9 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 // Get Sheet ID from db entity
                 string sheetId = sheetListLink.SheetId;
 
+                // Whenever devdata 'rowHash' is not available for any row, the items are untracked.
+                bool containsRowHash = false;
+
                 // Check for spreadsheet existence
                 var existingSheet = await GetSheetAsync(sheetId);
                 if (existingSheet != null)
@@ -851,6 +900,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         {
                             foreach (var devMetaData in metaData.DeveloperMetadata?.Where(x => x.MetadataKey.Equals("rowHash", StringComparison.InvariantCultureIgnoreCase)))
                             {
+                                containsRowHash = true;
                                 var targetIdx = devMetaData.Location.DimensionRange.StartIndex.GetValueOrDefault(1);
                                 if (originalRowHash.ContainsKey(targetIdx) == false)
                                 {
@@ -915,7 +965,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                             if (props?.Any(x => x.Value != null) == true)
                             {
                                 // Determine the type
-                                ReceivedItemTypeEnum itemType = ReceivedItemTypeEnum.NEW;
+                                ReceivedItemTypeEnum itemType = (containsRowHash)? ReceivedItemTypeEnum.NEW : ReceivedItemTypeEnum.UNTRACKED;
 
                                 // Determine if this type was changed
                                 if (originalRowHash.ContainsKey(rowIdx))
