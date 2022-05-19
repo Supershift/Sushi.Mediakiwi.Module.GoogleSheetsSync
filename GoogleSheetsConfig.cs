@@ -28,5 +28,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         /// </summary>
         [ConfigurationKeyName("handler-path")]
         public string HandlerPath { get; set; } = "/signin-google";
+
+        /// <summary>
+        /// Which domains are allowed to edit the produced googlesheets file ?
+        /// </summary>
+        [ConfigurationKeyName("allowed-domains")]
+        public string[] AllowedDomains { get; set; }
     }
 }
