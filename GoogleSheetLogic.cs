@@ -475,8 +475,10 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
                 // Get the type of item we're interating
                 var listItemType = inList?.wim?.ListDataCollection?.Count > 0 ? inList.wim.ListDataCollection[0].GetType() : null;
-                var listItemPropertyTypes = listItemType.GetProperties().Select(Property => new { Property.Name, Property }).ToDictionary(t => t.Name, t => t.Property);
 
+                // Get all Properties from the object
+                var listItemPropertyTypes = listItemType.GetProperties().Select(Property => new { Property.Name, Property }).ToDictionary(t => t.Name, t => t.Property);
+   
 
                 // Add Developer MetaData for Header Columns
                 foreach (var col in listDataColumns)
@@ -596,7 +598,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 var dataEnumerator = inList.wim.ListDataCollection.GetEnumerator();
                 while (dataEnumerator.MoveNext())
                 {
-                    List<object> tmp = listDataColumns.Select(x => listItemPropertyTypes[x.ColumnValuePropertyName].GetValue(dataEnumerator.Current)).ToList();
+                    List<object> tmp = listDataColumns.Select(x => FastReflectionHelper.GetProperty(dataEnumerator.Current, x.ColumnValuePropertyName)).ToList();
                     itemsTempData.Add(tmp);
                 }
 
