@@ -12,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Sushi.Mediakiwi.Data;
 using Sushi.Mediakiwi.Framework;
 using Sushi.Mediakiwi.Framework.EventArguments;
+using System.Reflection;
 
 namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 {
@@ -197,6 +198,9 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 // Get first sheet
                 var currentSheet = currentSpreadSheet.Sheets.FirstOrDefault();
 
+                // Get all columns without the API ones.
+                var listDataColumns = inList.wim.ListDataColumns.List.Where(x => x.Type != ListDataColumnType.APIOnly).ToList();
+
                 // All Additional Requests
                 List<Request> requests = new List<Request>();
 
@@ -311,10 +315,27 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         Range = new GridRange()
                         {
                             SheetId = currentSheet.Properties.SheetId,
+                            StartRowIndex = 0,
+                            EndRowIndex = inList.wim.ListDataCollection.Count + 1
+                            
                         },
-                        Fields = "userEnteredValue"
+                        Fields = "userEnteredValue", 
                     }
                 });
+
+                //requests.Add(new Request()
+                //{
+                //    InsertDimension = new InsertDimensionRequest()
+                //    {
+                //        Range = new DimensionRange()
+                //        {
+                //            Dimension = "ROWS",
+                //            StartIndex = 0,
+                //            EndIndex = inList.wim.ListDataCollection.Count + 1,
+                //            SheetId = currentSheet.Properties.SheetId
+                //        }
+                //    }
+                //});
 
                 #endregion Remove existing cells
 
@@ -369,9 +390,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
 
                 int colidx = 0;
+
                 // Add header columns
-                foreach (var col in inList.wim.ListDataColumns.List)
+                foreach (var col in listDataColumns)
                 {
+
                     var items = await GetDropdownValuesAsync(inList, col.ColumnValuePropertyName);
                     if (items?.Count > 0)
                     {
@@ -424,6 +447,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                             },
                         },
                     });
+
                     colidx++;
                 }
 
@@ -451,11 +475,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
                 // Get the type of item we're interating
                 var listItemType = inList?.wim?.ListDataCollection?.Count > 0 ? inList.wim.ListDataCollection[0].GetType() : null;
+                var listItemPropertyTypes = listItemType.GetProperties().Select(Property => new { Property.Name, Property }).ToDictionary(t => t.Name, t => t.Property);
+
 
                 // Add Developer MetaData for Header Columns
-                foreach (var col in inList.wim.ListDataColumns.List)
+                foreach (var col in listDataColumns)
                 {
-                    var colIdx = inList.wim.ListDataColumns.List.IndexOf(col);
+                    var colIdx = listDataColumns.IndexOf(col);
 
                     devMetaData.Add(new DeveloperMetadata()
                     {
@@ -478,7 +504,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     // Add the type of the property this column represents
                     if (listItemType != null)
                     {
-                        Type propertyType = listItemType.GetProperty(col.ColumnValuePropertyName).PropertyType;
+                        Type propertyType = listItemPropertyTypes[col.ColumnValuePropertyName].PropertyType;
                         devMetaData.Add(new DeveloperMetadata()
                         {
                             Location = new DeveloperMetadataLocation()
@@ -565,51 +591,27 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     });
                 }
 
-                // Make sure that the amount of rows are going to fit.
-                // The normal max rowcount for Google Sheets is 1000.
-                requests.Add(new Request()
-                {
-                    UpdateSheetProperties = new UpdateSheetPropertiesRequest()
-                    {
-                        Properties = new SheetProperties()
-                        {
-                            SheetId = currentSheet.Properties.SheetId,
-                            Title = string.IsNullOrWhiteSpace(currentSheet.Properties.Title) ? "Sheet 1" : currentSheet.Properties.Title,
-                            GridProperties = new GridProperties()
-                            {
-                                RowCount = inList.wim.ListDataCollection.Count + 1,
-                                ColumnCount = colidx + 1
-                            }
-                        },
-                        Fields = "*",
-                    }
-                });
+                List<List<object>> itemsTempData = new List<List<object>>();
 
-                // Loop through items
-                foreach (var item in inList.wim.ListDataCollection)
+                var dataEnumerator = inList.wim.ListDataCollection.GetEnumerator();
+                while (dataEnumerator.MoveNext())
+                {
+                    List<object> tmp = listDataColumns.Select(x => listItemPropertyTypes[x.ColumnValuePropertyName].GetValue(dataEnumerator.Current)).ToList();
+                    itemsTempData.Add(tmp);
+                }
+
+                foreach (var rowDataEnum in itemsTempData)
                 {
                     var rowData = new RowData()
                     {
                         Values = new List<CellData>()
                     };
 
-                    // Get the type of item
-                    var itemType = item.GetType();
-
-                    // Create an instance of this type
-                    var tempComp = Activator.CreateInstance(itemType);
-
-                    // Reflect actual data to instance
-                    Utils.ReflectProperty(item, tempComp);
-
                     // Loop through items in the search list
-                    foreach (var col in inList.wim.ListDataColumns.List)
+                    foreach (var rawData in rowDataEnum)
                     {
                         // Create new cell data for column value
                         var cellData = new CellData();
-
-                        // Get data item from search list
-                        var rawData = itemType.GetProperty(col.ColumnValuePropertyName).GetValue(tempComp);
 
                         if (rawData is string rawString)
                         {
@@ -693,7 +695,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                                         EndIndex = rowIdx + 1,
                                         StartIndex = rowIdx,
                                         SheetId = currentSheet.Properties.SheetId
-                                    } 
+                                    }
                                 },
                                 MetadataKey = "rowHash",
                                 MetadataValue = GoogleValueHasher.CreateHash(rowData.Values),
@@ -714,7 +716,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         {
                             ColumnIndex = 0,
                             RowIndex = 0,
-                            SheetId = currentSheet.Properties.SheetId,
+                            SheetId = currentSheet.Properties.SheetId
                         }
                     }
                 });
@@ -737,23 +739,16 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
                 // Determine if devdata can be added, depending on size
                 int sizeLeft = MAX_DEVELOPERDATA_SIZE;
-                foreach (var item in requests.Where(x => x.CreateDeveloperMetadata != null))
-                {
-                    sizeLeft -= item.CreateDeveloperMetadata.DeveloperMetadata.MetadataKey.Length;
-                    sizeLeft -= item.CreateDeveloperMetadata.DeveloperMetadata.MetadataValue.Length;
-                }
-
-                foreach (var item in lateRequests.Where(x => x.CreateDeveloperMetadata != null))
-                {
-                    sizeLeft -= item.CreateDeveloperMetadata.DeveloperMetadata.MetadataKey.Length;
-                    sizeLeft -= item.CreateDeveloperMetadata.DeveloperMetadata.MetadataValue.Length;
-                }
+                sizeLeft -= requests.Where(x => x.CreateDeveloperMetadata?.DeveloperMetadata != null).Sum(x => x.CreateDeveloperMetadata.DeveloperMetadata.MetadataKey.Length);
+                sizeLeft -= requests.Where(x => x.CreateDeveloperMetadata?.DeveloperMetadata != null).Sum(x => x.CreateDeveloperMetadata.DeveloperMetadata.MetadataValue.Length);
+                sizeLeft -= lateRequests.Where(x => x.CreateDeveloperMetadata?.DeveloperMetadata != null).Sum(x => x.CreateDeveloperMetadata.DeveloperMetadata.MetadataKey.Length);
+                sizeLeft -= lateRequests.Where(x => x.CreateDeveloperMetadata?.DeveloperMetadata != null).Sum(x => x.CreateDeveloperMetadata.DeveloperMetadata.MetadataValue.Length);
 
                 // The developer metadata is too big, remove the rowhash
                 if (sizeLeft < 1)
                 {
                     lateRequests.RemoveAll(x => x.CreateDeveloperMetadata?.DeveloperMetadata?.MetadataKey.Equals("rowHash") == true);
-                    returnMessage = "Change tracking is disabled, too much data to keep track of.";
+                    returnMessage = "Change tracking is disabled, too much data to keep track off.";
                 }
 
                 // Run all requests
