@@ -124,7 +124,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         private async Task<Dictionary<string, string>> GetDropdownValuesAsync(IComponentListTemplate inList, string propertyName)
         {
-            Dictionary<string, string> temp = new Dictionary<string, string>();
+            Dictionary<string, string> temp = new();
 
             if (inList is ComponentListTemplate template)
             {
@@ -208,10 +208,10 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 var listDataColumns = inList.wim.ListDataColumns.List.Where(x => x.Type != ListDataColumnType.APIOnly).ToList();
 
                 // All Additional Requests
-                List<Request> requests = new List<Request>();
+                List<Request> requests = new();
 
                 // All late requests
-                List<Request> lateRequests = new List<Request>();
+                List<Request> lateRequests = new();
 
                 #region Remove all developer info
 
@@ -221,17 +221,17 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 {
                     foreach (var protectedRange in currentSheet.ProtectedRanges)
                     {
-                        requests.Add(new Request()
+                        requests.Add(new Request
                         {
-                            DeleteNamedRange = new DeleteNamedRangeRequest()
+                            DeleteNamedRange = new DeleteNamedRangeRequest
                             {
                                 NamedRangeId = protectedRange.NamedRangeId
                             }
                         });
 
-                        requests.Add(new Request()
+                        requests.Add(new Request
                         {
-                            DeleteProtectedRange = new DeleteProtectedRangeRequest()
+                            DeleteProtectedRange = new DeleteProtectedRangeRequest
                             {
                                 ProtectedRangeId = protectedRange.ProtectedRangeId
                             }
@@ -240,13 +240,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 }
 
                 // Delete all developer metadata
-                requests.Add(new Request()
+                requests.Add(new Request
                 {
-                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest()
+                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest
                     {
-                        DataFilter = new DataFilter()
+                        DataFilter = new DataFilter
                         {
-                            DeveloperMetadataLookup = new DeveloperMetadataLookup()
+                            DeveloperMetadataLookup = new DeveloperMetadataLookup
                             {
                                 MetadataKey = "valueType"
                             }
@@ -254,13 +254,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     }
                 });
 
-                requests.Add(new Request()
+                requests.Add(new Request
                 {
-                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest()
+                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest
                     {
-                        DataFilter = new DataFilter()
+                        DataFilter = new DataFilter
                         {
-                            DeveloperMetadataLookup = new DeveloperMetadataLookup()
+                            DeveloperMetadataLookup = new DeveloperMetadataLookup
                             {
                                 MetadataKey = "propertyName"
                             }
@@ -268,13 +268,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     }
                 });
 
-                requests.Add(new Request()
+                requests.Add(new Request
                 {
-                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest()
+                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest
                     {
-                        DataFilter = new DataFilter()
+                        DataFilter = new DataFilter
                         {
-                            DeveloperMetadataLookup = new DeveloperMetadataLookup()
+                            DeveloperMetadataLookup = new DeveloperMetadataLookup
                             {
                                 MetadataKey = "propertyType"
                             }
@@ -282,13 +282,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     }
                 });
 
-                requests.Add(new Request()
+                requests.Add(new Request
                 {
-                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest()
+                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest
                     {
-                        DataFilter = new DataFilter()
+                        DataFilter = new DataFilter
                         {
-                            DeveloperMetadataLookup = new DeveloperMetadataLookup()
+                            DeveloperMetadataLookup = new DeveloperMetadataLookup
                             {
                                 MetadataKey = "propertyIsKey"
                             }
@@ -296,13 +296,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     }
                 });
 
-                requests.Add(new Request()
+                requests.Add(new Request
                 {
-                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest()
+                    DeleteDeveloperMetadata = new DeleteDeveloperMetadataRequest
                     {
-                        DataFilter = new DataFilter()
+                        DataFilter = new DataFilter
                         {
-                            DeveloperMetadataLookup = new DeveloperMetadataLookup()
+                            DeveloperMetadataLookup = new DeveloperMetadataLookup
                             {
                                 MetadataKey = "rowHash"
                             }
@@ -314,11 +314,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
                 #region Remove existing cells
 
-                requests.Add(new Request()
+                requests.Add(new Request
                 {
-                    UpdateCells = new UpdateCellsRequest()
+                    UpdateCells = new UpdateCellsRequest
                     {
-                        Range = new GridRange()
+                        Range = new GridRange
                         {
                             SheetId = currentSheet.Properties.SheetId,
                             StartRowIndex = 0,
@@ -335,14 +335,14 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 var namedSheetId = "MK.Columns";
 
                 // Add named range
-                requests.Add(new Request()
+                requests.Add(new Request
                 {
-                    AddNamedRange = new AddNamedRangeRequest()
+                    AddNamedRange = new AddNamedRangeRequest
                     {
-                        NamedRange = new NamedRange()
+                        NamedRange = new NamedRange
                         {
                             Name = "MK.Columns",
-                            Range = new GridRange()
+                            Range = new GridRange
                             {
                                 StartRowIndex = 0,
                                 EndRowIndex = 1,
@@ -357,11 +357,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
 
                 // Set first row as protected
-                requests.Add(new Request()
+                requests.Add(new Request
                 {
-                    AddProtectedRange = new AddProtectedRangeRequest()
+                    AddProtectedRange = new AddProtectedRangeRequest
                     {
-                        ProtectedRange = new ProtectedRange()
+                        ProtectedRange = new ProtectedRange
                         {
                             NamedRangeId = namedSheetId,
                             Description = "These columns should match the ones exported from Mediakiwi",
@@ -370,12 +370,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     }
                 });
 
-
                 // Complete data collection
                 IList<RowData> rowsData = new List<RowData>();
 
                 // Add column headers
-                RowData headerRow = new RowData()
+                RowData headerRow = new()
                 {
                     Values = new List<CellData>()
                 };
@@ -443,10 +442,29 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     colidx++;
                 }
 
+                // Expand the sheet to the correct amount of rows
+                requests.Add(new Request
+                {
+                    UpdateSheetProperties = new UpdateSheetPropertiesRequest
+                    {
+                        Fields = "*",
+                        Properties = new SheetProperties
+                        {
+                            GridProperties = new GridProperties
+                            {
+                                RowCount = inList.wim.ListDataCollection.Count + 1,
+                                ColumnCount = listDataColumns.Count + 1,
+                            },
+                            SheetId = currentSheet.Properties.SheetId,
+                            Title = inList.wim.ListTitle
+                        }
+                    }
+                });
+
                 // Add header row
                 rowsData.Add(headerRow);
 
-                List<DeveloperMetadata> devMetaData = new List<DeveloperMetadata>();
+                List<DeveloperMetadata> devMetaData = new();
 
                 // Retrieve Item Type, and set as Developer MetaData so it can later be reconstructed
                 if (inList?.wim?.ListDataCollection?.Count > 0)
@@ -576,16 +594,16 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 foreach (var _developerMetadata in devMetaData)
                 {
                     // Add developer metadata request
-                    requests.Add(new Request()
+                    requests.Add(new Request
                     {
-                        CreateDeveloperMetadata = new CreateDeveloperMetadataRequest()
+                        CreateDeveloperMetadata = new CreateDeveloperMetadataRequest
                         {
                             DeveloperMetadata = _developerMetadata,
                         }
                     });
                 }
 
-                List<List<object>> itemsTempData = new List<List<object>>();
+                List<List<object>> itemsTempData = new();
 
                 var dataEnumerator = inList.wim.ListDataCollection.GetEnumerator();
                 while (dataEnumerator.MoveNext())
@@ -700,13 +718,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 }
 
                 // Update the SpreadSheet data
-                requests.Add(new Request()
+                requests.Add(new Request
                 {
-                    UpdateCells = new UpdateCellsRequest()
+                    UpdateCells = new UpdateCellsRequest
                     {
                         Rows = rowsData,
                         Fields = "*",
-                        Start = new GridCoordinate()
+                        Start = new GridCoordinate
                         {
                             ColumnIndex = 0,
                             RowIndex = 0,
@@ -748,7 +766,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 // Run all requests
                 if (requests?.Count > 0)
                 {
-                    BatchUpdateSpreadsheetRequest requestBody = new BatchUpdateSpreadsheetRequest();
+                    BatchUpdateSpreadsheetRequest requestBody = new();
                     requestBody.Requests = requests.Concat(lateRequests).ToList();
                     SpreadsheetsResource.BatchUpdateRequest request = _sheetsService.Spreadsheets.BatchUpdate(requestBody, currentSpreadSheet.SpreadsheetId);
                     BatchUpdateSpreadsheetResponse response = await request.ExecuteAsync();
@@ -795,7 +813,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
                 if (responseCreate != null)
                 {
-                    List<string> allowedDomains = new List<string>();
+                    List<string> allowedDomains = new();
 
                     if (_config?.AllowedDomains?.Length > 0)
                     {
@@ -808,7 +826,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
                     foreach (var domain in allowedDomains)
                     {
-                        Google.Apis.Drive.v3.Data.Permission perms = new Google.Apis.Drive.v3.Data.Permission();
+                        Google.Apis.Drive.v3.Data.Permission perms = new();
 
                         perms.Role = "writer";
                         perms.Type = "domain";
@@ -847,7 +865,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         public async Task<(bool success, string errorMessage, ComponentListDataReceived? listEvent)> ConvertSheetToListDataReceivedEvent(Data.GoogleSheetListLink sheetListLink, IComponentListTemplate inList)
         {
             // Collected Values Container
-            List<ComponentListDataReceivedItem> CollectedValues = new List<ComponentListDataReceivedItem>();
+            List<ComponentListDataReceivedItem> CollectedValues = new();
 
             // Check if the link exists
             if (sheetListLink?.ID > 0)
@@ -871,13 +889,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         var sheetData = currentSheet.Data.FirstOrDefault();
 
                         // Lookup table for property names
-                        Dictionary<int, string> ColumnPropertyName = new Dictionary<int, string>();
+                        Dictionary<int, string> ColumnPropertyName = new();
 
                         // Lookup table for property types
-                        Dictionary<int, Type> ColumnPropertyType = new Dictionary<int, Type>();
+                        Dictionary<int, Type> ColumnPropertyType = new();
 
                         // Lookup table for value Hashes
-                        Dictionary<int, string> originalRowHash = new Dictionary<int, string>();
+                        Dictionary<int, string> originalRowHash = new();
 
                         // First get a column index -> propertyName mapping
                         foreach (var metaData in sheetData?.ColumnMetadata?.Where(x => x.DeveloperMetadata?.Count > 0))
@@ -927,11 +945,11 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                             int rowIdx = sheetData.RowData.IndexOf(row);
 
                             // Maintains a dictionary of the propertynames, coupled to a value
-                            Dictionary<string, object> props = new Dictionary<string, object>();
+                            Dictionary<string, object> props = new();
 
                             // Maintains a dictionary of the cell values which we're included during export.
                             // this is needed to create a hash based on the correct columns
-                            List<CellData> includedCells = new List<CellData>();
+                            List<CellData> includedCells = new();
 
                             // Only extract values from columns we originally provided.
                             foreach (var cellValue in row.Values.Take(ColumnPropertyName.Count))

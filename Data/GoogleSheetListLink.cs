@@ -1,5 +1,4 @@
-﻿using System.Data;
-using Sushi.MicroORM;
+﻿using Sushi.MicroORM;
 using Sushi.MicroORM.Mapping;
 
 namespace Sushi.Mediakiwi.Module.GoogleSheetsSync.Data
