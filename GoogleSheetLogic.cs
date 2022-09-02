@@ -188,6 +188,12 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 inList.wim.GridDataCommunication.ShowAll = true;
                 inList.wim.GridDataCommunication.PageSize = 10000;
 
+                // When the call is made from the MKAPI, clear the grid data first.
+                if (inList.wim.IsMKApiCall == true)
+                {
+                    inList.wim.ClearGridData();
+                }
+
                 if (inList.wim.Console.Component == null)
                 {
                     inList.wim.Console.Component = new Beta.GeneratedCms.Source.Component();
@@ -322,20 +328,6 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         Fields = "userEnteredValue", 
                     }
                 });
-
-                //requests.Add(new Request()
-                //{
-                //    InsertDimension = new InsertDimensionRequest()
-                //    {
-                //        Range = new DimensionRange()
-                //        {
-                //            Dimension = "ROWS",
-                //            StartIndex = 0,
-                //            EndIndex = inList.wim.ListDataCollection.Count + 1,
-                //            SheetId = currentSheet.Properties.SheetId
-                //        }
-                //    }
-                //});
 
                 #endregion Remove existing cells
 
