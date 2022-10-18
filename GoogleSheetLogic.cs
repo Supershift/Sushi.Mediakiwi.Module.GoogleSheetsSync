@@ -12,64 +12,75 @@ using Microsoft.Extensions.Configuration;
 using Sushi.Mediakiwi.Data;
 using Sushi.Mediakiwi.Framework;
 using Sushi.Mediakiwi.Framework.EventArguments;
-using System.Reflection;
 
 namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 {
-    internal class GoogleSheetLogic
+    public class GoogleSheetLogic
     {
         private const int MAX_DEVELOPERDATA_SIZE = 30000;
 
-        private SheetsService _sheetsService { get; set; }
-        private DriveService _driveService { get; set; }
+        public GoogleSheetsConfig GoogleSheetConfig { get; private set; }
+        public SheetsService GoogleSheetsService { get; private set; }
+        public DriveService GoogleDriveService { get; private set; }
+        public CellFormat UserEnteredFormat = new CellFormat()
+        {
+            BackgroundColor = new Color()
+            {
+                Blue = 0.8f,
+                Green = 0.8f,
+                Red = 0.8f,
+                Alpha = 1
+            },
+            TextFormat = new TextFormat()
+            {
+                Bold = true,
+            },
+        };
 
         public bool IsInitialized { get; set; }
 
-        private GoogleSheetsConfig _config { get; set; }
+        #region CTor
+
         public GoogleSheetLogic(IConfiguration configuration)
         {
-            _config = configuration.GetSection("GoogleSheetsSettings").Get<GoogleSheetsConfig>();
-        }
+            GoogleSheetConfig = configuration.GetSection("GoogleSheetsSettings").Get<GoogleSheetsConfig>();
 
-        #region Initialize Async
-
-        public async Task InitializeAsync()
-        {
             if (IsInitialized == false)
             {
-                if (string.IsNullOrWhiteSpace(_config.ServiceAccountFilename) && string.IsNullOrWhiteSpace(_config.ClientID) && string.IsNullOrWhiteSpace(_config.ClientSecret))
+                if (string.IsNullOrWhiteSpace(GoogleSheetConfig.ServiceAccountFilename) && string.IsNullOrWhiteSpace(GoogleSheetConfig.ClientID) && string.IsNullOrWhiteSpace(GoogleSheetConfig.ClientSecret))
                 {
                     throw new ApplicationException("At least one of 'credentialsFileName' or both 'clientId' and 'clientSecret' should be set");
                 }
 
                 GoogleCredential credential;
 
-                if (string.IsNullOrWhiteSpace(_config.ServiceAccountFilename) == false)
+                if (string.IsNullOrWhiteSpace(GoogleSheetConfig.ServiceAccountFilename) == false)
                 {
-                    if (File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _config.ServiceAccountFilename)))
+                    if (File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, GoogleSheetConfig.ServiceAccountFilename)))
                     {
                         try
                         {
-                            using (var stream = new FileStream(_config.ServiceAccountFilename, FileMode.Open, FileAccess.Read))
+                            using (var stream = new FileStream(GoogleSheetConfig.ServiceAccountFilename, FileMode.Open, FileAccess.Read))
                             {
                                 credential = GoogleCredential.FromStream(stream).CreateScoped(new string[] { SheetsService.Scope.Spreadsheets, DriveService.Scope.DriveFile });
                             }
                         }
                         catch (Exception ex)
                         {
+                            Notification.InsertOne("GoogleSheetLogic.CTOR", ex.Message);
                             Console.Error.WriteLine(ex);
                             throw;
                         }
 
                         // Create Google Sheets API service.
-                        _sheetsService = new SheetsService(new BaseClientService.Initializer()
+                        GoogleSheetsService = new SheetsService(new BaseClientService.Initializer()
                         {
                             HttpClientInitializer = credential,
                             ApplicationName = nameof(GoogleSheetExportListModule),
                         });
 
                         // Create Google Drive API service.
-                        _driveService = new DriveService(new BaseClientService.Initializer()
+                        GoogleDriveService = new DriveService(new BaseClientService.Initializer()
                         {
                             HttpClientInitializer = credential,
                             ApplicationName = nameof(GoogleSheetExportListModule),
@@ -78,15 +89,18 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         IsInitialized = true;
 
                     }
-                    else 
+                    else
                     {
-                        throw new ApplicationException($"The supplied file for 'credentialsFileName' ({_config.ServiceAccountFilename}) does not exist");
+                        var errorMessage = $"The supplied file for 'credentialsFileName' ({GoogleSheetConfig.ServiceAccountFilename}) does not exist";
+                        Notification.InsertOne("GoogleSheetLogic.CTOR", errorMessage);
+
+                        throw new ApplicationException(errorMessage);
                     }
                 }
             }
         }
 
-        #endregion Initialize Async
+        #endregion CTor
 
         #region Get Sheet Async
 
@@ -99,7 +113,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
             try
             {
-                var getRequest = new SpreadsheetsResource.GetRequest(_sheetsService, id);
+                var getRequest = new SpreadsheetsResource.GetRequest(GoogleSheetsService, id);
                 getRequest.IncludeGridData = true;
                 var responseGet = await getRequest.ExecuteAsync();
                 if (responseGet != null)
@@ -423,20 +437,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                         {
                             StringValue = col.ColumnName,
                         },
-                        UserEnteredFormat = new CellFormat()
-                        {
-                            BackgroundColor = new Color()
-                            {
-                                Blue = 0.8f,
-                                Green = 0.8f,
-                                Red = 0.8f,
-                                Alpha = 1
-                            },
-                            TextFormat = new TextFormat()
-                            {
-                                Bold = true,
-                            },
-                        },
+                        UserEnteredFormat = UserEnteredFormat,
                     });
 
                     colidx++;
@@ -768,7 +769,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 {
                     BatchUpdateSpreadsheetRequest requestBody = new();
                     requestBody.Requests = requests.Concat(lateRequests).ToList();
-                    SpreadsheetsResource.BatchUpdateRequest request = _sheetsService.Spreadsheets.BatchUpdate(requestBody, currentSpreadSheet.SpreadsheetId);
+                    SpreadsheetsResource.BatchUpdateRequest request = GoogleSheetsService.Spreadsheets.BatchUpdate(requestBody, currentSpreadSheet.SpreadsheetId);
                     BatchUpdateSpreadsheetResponse response = await request.ExecuteAsync();
                 }
 
@@ -785,13 +786,13 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         #region Create Sheet Async
 
-        public async Task<Spreadsheet> CreateSheetAsync(IComponentListTemplate inList)
+        public async Task<Spreadsheet> CreateSheetAsync(string title, string userEmailAddress)
         {
             var newspreadSheet = new Spreadsheet()
             {
                 Properties = new SpreadsheetProperties()
                 {
-                    Title = inList.wim.CurrentList.Name
+                    Title = title
                 },
                 Sheets = new List<Sheet>()
                 {
@@ -799,7 +800,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     {
                         Properties = new SheetProperties()
                         {
-                            Title = inList.wim.CurrentList.Name
+                            Title = title
                         }
                     }
                 },
@@ -808,38 +809,59 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
             try
             {
-                var createRequest = _sheetsService.Spreadsheets.Create(newspreadSheet);
+                var createRequest = GoogleSheetsService.Spreadsheets.Create(newspreadSheet);
                 var responseCreate = await createRequest.ExecuteAsync();
 
                 if (responseCreate != null)
                 {
-                    List<string> allowedDomains = new();
-
-                    if (_config?.AllowedDomains?.Length > 0)
+                    if (GoogleSheetConfig?.PermissionBase == GoogleSheetsPermissionsEnum.USEREMAIL)
                     {
-                        allowedDomains = _config.AllowedDomains.ToList();
-                    }
-                    else
-                    {
-                        allowedDomains.Add("supershift.nl");
-                    }
-
-                    foreach (var domain in allowedDomains)
-                    {
-                        Google.Apis.Drive.v3.Data.Permission perms = new();
-
-                        perms.Role = "writer";
-                        perms.Type = "domain";
-                        perms.Domain = domain;
-
                         // Add all tasks to array
                         try
                         {
-                            await _driveService.Permissions.Create(perms, responseCreate.SpreadsheetId).ExecuteAsync();
+                            await CreatePermission(userEmailAddress, string.Empty, responseCreate.SpreadsheetId);
                         }
                         catch (GoogleApiException ex)
                         {
-                            await Notification.InsertOneAsync("PriceListGenerator.CreateSheetAsync", ex);
+                            await Notification.InsertOneAsync("GoogleSheetLogic.CreateSheetAsync", ex);
+                        }
+                    }
+                    else if (GoogleSheetConfig?.PermissionBase == GoogleSheetsPermissionsEnum.USERDOMAIN)
+                    {
+                        // Add all tasks to array
+                        try
+                        {
+                            await CreatePermission(string.Empty, userEmailAddress.Substring(userEmailAddress.IndexOf('@') + 1), responseCreate.SpreadsheetId);
+                        }
+                        catch (GoogleApiException ex)
+                        {
+                            await Notification.InsertOneAsync("GoogleSheetLogic.CreateSheetAsync", ex);
+                        }
+                    }
+                    else if (GoogleSheetConfig.PermissionBase == GoogleSheetsPermissionsEnum.SETDOMAINS)
+                    {
+                        List<string> allowedDomains = new List<string>();
+
+                        if (GoogleSheetConfig?.AllowedDomains?.Length > 0)
+                        {
+                            allowedDomains = GoogleSheetConfig.AllowedDomains.ToList();
+                        }
+                        else
+                        {
+                            allowedDomains.Add("supershift.nl");
+                        }
+
+                        foreach (var domain in allowedDomains)
+                        {
+                            // Add all tasks to array
+                            try
+                            {
+                                await CreatePermission(string.Empty, domain, responseCreate.SpreadsheetId);
+                            }
+                            catch (GoogleApiException ex)
+                            {
+                                await Notification.InsertOneAsync("GoogleSheetLogic.CreateSheetAsync", ex);
+                            }
                         }
                     }
 
@@ -850,6 +872,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             {
                 if (ex.HttpStatusCode == System.Net.HttpStatusCode.InternalServerError)
                 {
+                    await Notification.InsertOneAsync("GoogleSheetLogic.CreateSheetAsync", ex);
+
                     // Internal error,
                     return null;
                 }
@@ -859,6 +883,32 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         }
 
         #endregion Create Sheet Async
+
+        #region Create Permission
+
+        private async Task CreatePermission(string email, string domain, string spreadSheetId)
+        {
+            Google.Apis.Drive.v3.Data.Permission perms = new()
+            {
+                Role = "writer"
+            };
+
+            if (string.IsNullOrWhiteSpace(email) == false)
+            {
+                perms.Type = "user";
+                perms.EmailAddress = email;
+            }
+            else
+            {
+                perms.Type = "domain";
+                perms.Domain = domain;
+            }
+
+            await GoogleDriveService.Permissions.Create(perms, spreadSheetId).ExecuteAsync();
+
+        }
+
+        #endregion Create Permission
 
         #region Convert Sheet to ListDataReceived Event
 
@@ -1091,12 +1141,12 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         public async Task<bool?> AuthorizeUser(IApplicationUser user, HttpContext context)
         {
             // Only perform User OAuth when the client ID is set
-            if (string.IsNullOrWhiteSpace(_config.ClientID) || string.IsNullOrWhiteSpace(_config.ClientSecret))
+            if (string.IsNullOrWhiteSpace(GoogleSheetConfig.ClientID) || string.IsNullOrWhiteSpace(GoogleSheetConfig.ClientSecret))
             {
                 return null;
             }
 
-            if (string.IsNullOrWhiteSpace(_config?.HandlerPath))
+            if (string.IsNullOrWhiteSpace(GoogleSheetConfig?.HandlerPath))
             {
                 return false;
             }
@@ -1111,8 +1161,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                      {
                          ClientSecrets = new ClientSecrets
                          {
-                             ClientId = _config.ClientID,
-                             ClientSecret = _config.ClientSecret
+                             ClientId = GoogleSheetConfig.ClientID,
+                             ClientSecret = GoogleSheetConfig.ClientSecret
                          },
                          DataStore = new GoogleTokenStore(user, nameof(GoogleSheetLogic)),
                          Scopes = new string[] 
@@ -1124,7 +1174,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                 );
 
                 var userId = nameof(GoogleSheetLogic);
-                var uri = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}{_config.HandlerPath}";
+                var uri = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}{GoogleSheetConfig.HandlerPath}";
                 var code = context.Request.Query["code"].FirstOrDefault();
                 if (code != null)
                 {
@@ -1149,14 +1199,14 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
                     {
 
                         // Create Google Sheets API service.
-                        _sheetsService = new SheetsService(new BaseClientService.Initializer()
+                        GoogleSheetsService = new SheetsService(new BaseClientService.Initializer()
                         {
                             HttpClientInitializer = result.Credential,
                             ApplicationName = nameof(GoogleSheetExportListModule),
                         });
 
                         // Create Google Drive API service.
-                        _driveService = new DriveService(new BaseClientService.Initializer()
+                        GoogleDriveService = new DriveService(new BaseClientService.Initializer()
                         {
                             HttpClientInitializer = result.Credential,
                             ApplicationName = nameof(GoogleSheetExportListModule),

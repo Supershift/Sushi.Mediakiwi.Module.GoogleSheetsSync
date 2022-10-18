@@ -10,7 +10,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
     {
         #region Properties
 
-        GoogleSheetLogic Converter { get; set; }
+        private readonly GoogleSheetLogic _googleSheetsLogic;
 
         public string ModuleTitle => "Google Sheets exporter";
 
@@ -34,9 +34,9 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         #region CTor
 
-        public GoogleSheetExportListModule(IServiceProvider services)
+        public GoogleSheetExportListModule(GoogleSheetLogic sheetLogic)
         {
-            Converter = services.GetService<GoogleSheetLogic>();
+            _googleSheetsLogic = sheetLogic;
         }
 
         #endregion CTor
@@ -45,10 +45,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         public async Task<ModuleExecutionResult> ExecuteAsync(IComponentListTemplate inList, IApplicationUser inUser, HttpContext context)
         {
-            await Converter.InitializeAsync();
-
             // When this module is User based, authorize the user
-            var authResult = await Converter.AuthorizeUser(inUser, context);
+            var authResult = await _googleSheetsLogic.AuthorizeUser(inUser, context);
             if (authResult.HasValue && authResult.Value == false)
             {
                 return new ModuleExecutionResult()
@@ -75,12 +73,12 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             string sheetId = sheetListLink.SheetId;
 
             // Check for spreadsheet existence
-            var existingSheet = await Converter.GetSheetAsync(sheetId);
+            var existingSheet = await _googleSheetsLogic.GetSheetAsync(sheetId);
             if (existingSheet != null)
             {
                 try
                 {
-                    var returnMessage = await Converter.UpdateSheetAsync(inList, existingSheet, sheetListLink);
+                    var returnMessage = await _googleSheetsLogic.UpdateSheetAsync(inList, existingSheet, sheetListLink);
                     return new ModuleExecutionResult()
                     {
                         IsSuccess = true,
@@ -101,12 +99,12 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             // No spreadsheet exists
             else 
             {
-                var newspreadSheet = await Converter.CreateSheetAsync(inList);
+                var newspreadSheet = await _googleSheetsLogic.CreateSheetAsync(inList.wim.CurrentList.Name, inUser.Email);
                 if (newspreadSheet != null)
                 {
                     try
                     {
-                        var returnMessage = await Converter.UpdateSheetAsync(inList, newspreadSheet, sheetListLink);
+                        var returnMessage = await _googleSheetsLogic.UpdateSheetAsync(inList, newspreadSheet, sheetListLink);
 
                         // Spreedsheet created,
                         return new ModuleExecutionResult()

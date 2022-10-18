@@ -2,7 +2,8 @@
 
 namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 {
-    internal class GoogleSheetsConfig 
+
+    public class GoogleSheetsConfig 
     {
         /// <summary>
         /// The Google OpenID client ID
@@ -34,5 +35,17 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
         /// </summary>
         [ConfigurationKeyName("allowed-domains")]
         public string[] AllowedDomains { get; set; }
+
+
+        /// <summary>
+        /// What type of permissions are we using ?
+        /// this can be one of :
+        /// 'USEREMAIL' for User email based permission (only creating user can view).
+        /// 'USERDOMAIN' for User email domain based permission (anyone in the same email domain as creating user can view).
+        /// 'SETDOMAINS' to use the AllowedDomains collection (anyone in the same email domain as one of the items in the list can view) 
+        /// </summary>
+        [ConfigurationKeyName("permission-base")]
+        public GoogleSheetsPermissionsEnum PermissionBase { get; set; } = GoogleSheetsPermissionsEnum.SETDOMAINS;
+
     }
 }

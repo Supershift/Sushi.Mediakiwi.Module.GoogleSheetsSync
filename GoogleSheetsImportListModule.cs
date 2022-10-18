@@ -12,7 +12,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
     {
         #region Properties
 
-        GoogleSheetLogic Converter { get; set; }
+        private readonly GoogleSheetLogic _googleSheetsLogic;
 
         public string ModuleTitle => "Google Sheets importer";
 
@@ -35,9 +35,9 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         #region CTor
 
-        public GoogleSheetsImportListModule(IServiceProvider services)
+        public GoogleSheetsImportListModule(GoogleSheetLogic googleSheetLogic)
         {
-            Converter = services.GetService<GoogleSheetLogic>();
+            _googleSheetsLogic = googleSheetLogic;
         }
 
         #endregion CTor
@@ -80,10 +80,8 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
 
         public async Task<ModuleExecutionResult> ExecuteAsync(IComponentListTemplate inList, IApplicationUser inUser, HttpContext context)
         {
-            await Converter.InitializeAsync();
-
             // When this module is User based, authorize the user
-            var authResult = await Converter.AuthorizeUser(inUser, context);
+            var authResult = await _googleSheetsLogic.AuthorizeUser(inUser, context);
             if (authResult.HasValue && authResult.Value == false)
             {
                 return new ModuleExecutionResult()
@@ -99,7 +97,7 @@ namespace Sushi.Mediakiwi.Module.GoogleSheetsSync
             // Convert the sheet to a list Event
             try
             {
-                var convertSheetToListEventResult = await Converter.ConvertSheetToListDataReceivedEvent(sheetListLink, inList);
+                var convertSheetToListEventResult = await _googleSheetsLogic.ConvertSheetToListDataReceivedEvent(sheetListLink, inList);
 
                 if (convertSheetToListEventResult.success && inList is ComponentListTemplate template)
                 {
