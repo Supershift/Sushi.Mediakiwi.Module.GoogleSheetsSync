@@ -27,10 +27,7 @@
   <ItemGroup>
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.57.0.2789" />
     <PackageReference Include="Google.Apis.Sheets.v4" Version="1.57.0.2727" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Sushi.Mediakiwi\src\Sushi.Mediakiwi\Sushi.Mediakiwi.csproj" />
+    <PackageReference Include="Sushi.Mediakiwi" Version="8.1.62" />
   </ItemGroup>
 
   <ItemGroup>
