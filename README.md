@@ -39,7 +39,14 @@ If you want to use this option, take a look at [The needed steps for creating a 
   // Get this ClientSecret from the Google Cloud platform
   "client-secret": "[GOOGLE-CLIENT-SECRET]",
   // What is the relative url path to listen to OpenID requests
-  "handler-path": "/signin-google"
+  "handler-path": "/signin-google",
+  // The basis on which writer permission is given, can be one of 'USEREMAIL', 'USERDOMAIN' or 'SETDOMAINS'
+  // USEREMAIL: Only the user requesting the Google Sheets creation will get writer permissions. This will send a Google email to the requesting user on every request.
+  // USERDOMAIN: Everyone in the same domain as the user requesting the Google Sheets creation will get writer permissions.  
+  // SETDOMAINS (default): Everyone in the same domain as the domains listed below will get writer permissions. 
+  "permission-base": "SETDOMAINS",
+  // Which domains are allowed to edit the produced googlesheets file (will be used ONLY when the permission-base is "SETDOMAINS") ?
+  "allowed-domains": [ "supershift.nl", "somedomain.com", "anotherdomain.com" ]
 },
 ```
 
